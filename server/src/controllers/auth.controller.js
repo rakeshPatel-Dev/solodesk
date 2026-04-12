@@ -1,5 +1,9 @@
 // controllers/auth.controller.js
 import User from "../models/user.model.js";
+import Client from "../models/client.model.js";
+import Project from "../models/project.model.js";
+import Task from "../models/task.model.js";
+import Payment from "../models/payment.model.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { generateToken, generateResetToken } from "../utils/generateToken.js";
@@ -436,4 +440,50 @@ export const deactivateAccount = async (req, res) => {
     return sendServerError(res, "Deactivate account error", error, "Server error");
   }
 
+};
+
+// @desc    Delete current logged in user and all related data
+// @route   DELETE /api/auth/delete-account
+// @access  Private
+export const deleteAccount = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const userProjects = await Project.find({ userId }).select("_id");
+    const projectIds = userProjects.map((project) => project._id);
+
+    await Promise.all([
+      Client.deleteMany({ userId }),
+      Project.deleteMany({ userId }),
+      Task.deleteMany({
+        $or: [{ userId }, { projectId: { $in: projectIds } }],
+      }),
+      Payment.deleteMany({
+        $or: [{ userId }, { projectId: { $in: projectIds } }],
+      }),
+      User.deleteOne({ _id: userId }),
+    ]);
+
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      path: "/",
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Account and related data deleted successfully",
+    });
+  } catch (error) {
+    return sendServerError(res, "Delete account error", error, "Server error");
+  }
 };
