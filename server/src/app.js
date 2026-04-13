@@ -3,6 +3,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth.route.js";
 import clientRoutes from "./routes/client.route.js";
+import paymentRoutes from "./routes/payment.route.js";
 import {
   sendBadRequestError,
   sendUnauthorizedError,
@@ -34,6 +35,7 @@ app.use(cookieParser());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/clients", clientRoutes);
+app.use("/api/payments", paymentRoutes);
 
 
 app.get("/", (req, res) => {

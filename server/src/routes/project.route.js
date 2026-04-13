@@ -1,6 +1,6 @@
 // routes/project.routes.js
 import express from "express";
-import { authenticateUser as protect } from "../middleware/auth.js";
+import { authenticateUser as protect } from "../middleware/auth.middleware.js";
 import {
   createProject,
   getProjects,
