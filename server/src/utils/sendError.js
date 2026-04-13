@@ -27,9 +27,9 @@ export const sendConflictError = (res, message, extra = {}) => {
   return sendError(res, 409, message, extra);
 };
 
-// @desc    Send server error response and log error to console if not in production
+// @desc    Send server error response (includes error details in response only in non-production)
 export const sendServerError = (res, logLabel, error, message) => {
-  console.warn(`${logLabel}:`, error);
+  console.error(`${logLabel}:`, error);
   const isProduction = process.env.NODE_ENV === "production";
 
   return sendError(res, 500, message, isProduction ? {} : { error: error.message });

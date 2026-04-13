@@ -1,10 +1,12 @@
 // controllers/client.controller.js
+// controllers/client.controller.js
 import Client from "../models/client.model.js";
 import {
   sendBadRequestError,
   sendNotFoundError,
   sendServerError,
 } from "../utils/sendError.js";
+import { escapeRegex } from "../utils/escapeRegex.js";
 import {
   validateObjectIdOrRespond,
   validateObjectIdArrayOrRespond,
@@ -17,7 +19,6 @@ export const createClient = async (req, res) => {
   try {
     const { name, address, email, phone, company, notes, status } = req.body;
 
-    // Check if client with same name and userId already exists
     const existingClient = await Client.findOne({
       name,
       userId: req.user.id,
@@ -27,7 +28,6 @@ export const createClient = async (req, res) => {
       return sendBadRequestError(res, "You already have a client with this name");
     }
 
-    // Check if email already exists for this user (if email provided)
     if (email) {
       const emailExists = await Client.findOne({
         email,
@@ -38,7 +38,6 @@ export const createClient = async (req, res) => {
       }
     }
 
-    // Create client
     const client = await Client.create({
       name,
       userId: req.user.id,
@@ -73,34 +72,29 @@ export const getClients = async (req, res) => {
       sortOrder = "desc",
     } = req.query;
 
-    // Build query
     const query = { userId: req.user.id };
 
-    // Filter by status
     if (status && status !== "all") {
       query.status = status;
     }
 
-    // Search functionality
     if (search) {
+      const escapedSearch = escapeRegex(search);
       query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
-        { company: { $regex: search, $options: "i" } },
-        { phone: { $regex: search, $options: "i" } },
+        { name: { $regex: escapedSearch, $options: "i" } },
+        { email: { $regex: escapedSearch, $options: "i" } },
+        { company: { $regex: escapedSearch, $options: "i" } },
+        { phone: { $regex: escapedSearch, $options: "i" } },
       ];
     }
 
-    // Pagination
     const pageNum = parseInt(page, 10);
     const limitNum = Math.min(parseInt(limit, 10), 50);
     const skip = (pageNum - 1) * limitNum;
 
-    // Sorting
     const sort = {};
     sort[sortBy] = sortOrder === "desc" ? -1 : 1;
 
-    // Execute queries
     const [clients, total] = await Promise.all([
       Client.find(query)
         .sort(sort)
@@ -132,7 +126,6 @@ export const getClientById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validate ObjectId
     if (!validateObjectIdOrRespond(res, id, "client ID")) return;
 
     const client = await Client.findOne({
@@ -161,10 +154,8 @@ export const updateClient = async (req, res) => {
     const { id } = req.params;
     const { name, address, email, phone, company, notes, status } = req.body;
 
-    // Validate ObjectId
     if (!validateObjectIdOrRespond(res, id, "client ID")) return;
 
-    // Check if client exists and belongs to user
     const client = await Client.findOne({
       _id: id,
       userId: req.user.id,
@@ -174,7 +165,6 @@ export const updateClient = async (req, res) => {
       return sendNotFoundError(res, "Client not found");
     }
 
-    // Check for duplicate name (excluding current client)
     if (name && name !== client.name) {
       const nameExists = await Client.findOne({
         name,
@@ -186,7 +176,6 @@ export const updateClient = async (req, res) => {
       }
     }
 
-    // Check for duplicate email (excluding current client)
     if (email && email !== client.email) {
       const emailExists = await Client.findOne({
         email,
@@ -198,7 +187,6 @@ export const updateClient = async (req, res) => {
       }
     }
 
-    // Update client
     const updatedClient = await Client.findByIdAndUpdate(
       id,
       {
@@ -229,7 +217,6 @@ export const deleteClient = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validate ObjectId
     if (!validateObjectIdOrRespond(res, id, "client ID")) return;
 
     const client = await Client.findOneAndDelete({
@@ -319,7 +306,6 @@ export const updateClientStatus = async (req, res) => {
       return sendBadRequestError(res, "Status must be either 'Active' or 'Inactive'");
     }
 
-    // Validate ObjectId
     if (!validateObjectIdOrRespond(res, id, "client ID")) return;
 
     const client = await Client.findOneAndUpdate(
@@ -352,7 +338,7 @@ export const searchClients = async (req, res) => {
       return sendBadRequestError(res, "Search query must be at least 2 characters");
     }
 
-    const searchRegex = new RegExp(q, "i");
+    const searchRegex = new RegExp(escapeRegex(q), "i");
     const limitNum = parseInt(limit, 10);
 
     const clients = await Client.find({

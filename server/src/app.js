@@ -45,6 +45,10 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
+  if (res.headersSent) {
+    return next(err);
+  }
+
   if (err?.message === "Not allowed by CORS") {
     return sendForbiddenError(res, "CORS policy does not allow this origin");
   }
@@ -71,5 +75,4 @@ app.use((err, req, res, next) => {
 
   return sendServerError(res, "App error handler", err, err?.message || "Internal server error");
 });
-
 export default app;

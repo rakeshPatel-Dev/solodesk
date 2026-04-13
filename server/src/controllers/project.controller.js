@@ -1,4 +1,5 @@
 // controllers/project.controller.js
+import mongoose from "mongoose";
 import Project from "../models/project.model.js";
 import Client from "../models/client.model.js";
 import {
@@ -6,6 +7,7 @@ import {
   sendNotFoundError,
   sendServerError,
 } from "../utils/sendError.js";
+import { escapeRegex } from "../utils/escapeRegex.js";
 import {
   validateObjectIdOrRespond,
   validateObjectIdArrayOrRespond,
@@ -122,7 +124,7 @@ export const getProjects = async (req, res) => {
 
     // Filter by type
     if (type) {
-      query.type = { $regex: type, $options: "i" };
+      query.type = { $regex: escapeRegex(type), $options: "i" };
     }
 
     // Filter by budget range
@@ -148,10 +150,11 @@ export const getProjects = async (req, res) => {
 
     // Search functionality
     if (search) {
+      const escapedSearch = escapeRegex(search);
       query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { type: { $regex: search, $options: "i" } },
+        { name: { $regex: escapedSearch, $options: "i" } },
+        { description: { $regex: escapedSearch, $options: "i" } },
+        { type: { $regex: escapedSearch, $options: "i" } },
       ];
     }
 
@@ -358,7 +361,7 @@ export const getProjectStats = async (req, res) => {
       Project.countDocuments({ userId: req.user.id, status: "In Progress" }),
       Project.countDocuments({ userId: req.user.id, status: "Completed" }),
       Project.aggregate([
-        { $match: { userId: req.user.id } },
+        { $match: { userId: new mongoose.Types.ObjectId(req.user.id) } },
         { $group: { _id: null, total: { $sum: "$budget" } } },
       ]),
       Project.find({ userId: req.user.id })
@@ -367,7 +370,7 @@ export const getProjectStats = async (req, res) => {
         .populate("clientId", "name")
         .select("name status budget clientId createdAt"),
       Project.aggregate([
-        { $match: { userId: req.user.id } },
+        { $match: { userId: new mongoose.Types.ObjectId(req.user.id) } },
         {
           $group: {
             _id: "$clientId",
@@ -527,7 +530,7 @@ export const searchProjects = async (req, res) => {
       return sendBadRequestError(res, "Search query must be at least 2 characters");
     }
 
-    const searchRegex = new RegExp(q, "i");
+    const searchRegex = new RegExp(escapeRegex(q), "i");
     const limitNum = parseInt(limit, 10);
 
     const projects = await Project.find({
@@ -560,6 +563,10 @@ export const getUpcomingDeadlines = async (req, res) => {
   try {
     const { days = 7 } = req.query;
     const daysNum = parseInt(days, 10);
+
+    if (!Number.isFinite(daysNum) || !Number.isInteger(daysNum) || daysNum < 0) {
+      return sendBadRequestError(res, "Days must be a non-negative integer");
+    }
 
     const today = new Date();
     const futureDate = new Date();
