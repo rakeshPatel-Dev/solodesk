@@ -124,6 +124,7 @@ export const getProjects = async (req, res) => {
 
     // Filter by type
     if (type) {
+      // Treat user input as literal text to avoid regex injection/ReDoS patterns.
       query.type = { $regex: escapeRegex(type), $options: "i" };
     }
 
@@ -150,6 +151,7 @@ export const getProjects = async (req, res) => {
 
     // Search functionality
     if (search) {
+      // Reuse escaped input across fields to keep search behavior consistent and safe.
       const escapedSearch = escapeRegex(search);
       query.$or = [
         { name: { $regex: escapedSearch, $options: "i" } },
@@ -347,6 +349,7 @@ export const deleteProject = async (req, res) => {
 // @access  Private
 export const getProjectStats = async (req, res) => {
   try {
+    // Aggregation requires ObjectId match type parity with stored userId values.
     const [
       totalProjects,
       leadProjects,

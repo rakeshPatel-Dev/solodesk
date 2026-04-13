@@ -1,5 +1,6 @@
 // controllers/client.controller.js
-import Client from "../models/client.model.js"; import {
+import Client from "../models/client.model.js";
+import {
   sendBadRequestError,
   sendNotFoundError,
   sendServerError,
@@ -77,6 +78,7 @@ export const getClients = async (req, res) => {
     }
 
     if (search) {
+      // Escape search input once and reuse so every field follows identical matching rules.
       const escapedSearch = escapeRegex(search);
       query.$or = [
         { name: { $regex: escapedSearch, $options: "i" } },
@@ -336,6 +338,7 @@ export const searchClients = async (req, res) => {
       return sendBadRequestError(res, "Search query must be at least 2 characters");
     }
 
+    // Search is intentionally partial/case-insensitive while still treating input as literal text.
     const searchRegex = new RegExp(escapeRegex(q), "i");
     const limitNum = parseInt(limit, 10);
 

@@ -14,6 +14,7 @@ import {
 } from "../validators/objectIdValidator.js";
 
 const toPositiveNumberOrNull = (value) => {
+  // Centralize numeric coercion so validation rules stay consistent across endpoints.
   if (value === undefined || value === null || value === "") return null;
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) return null;
@@ -73,6 +74,7 @@ export const createPayment = async (req, res) => {
       data: populatedPayment,
     });
   } catch (error) {
+    // Unique index conflicts are expected business errors, not server faults.
     if (error?.code === 11000) {
       return sendConflictError(res, "Payment record already exists for this project. Use update endpoint instead.");
     }
@@ -146,6 +148,7 @@ export const getPayments = async (req, res) => {
       if (normalizedMaxAmount !== null) query.totalAmount.$lte = normalizedMaxAmount;
     }
 
+    // Build project-scoped filters first so the payment query stays index-friendly.
     let filteredProjectIds = null;
 
     if (clientId) {
@@ -168,6 +171,7 @@ export const getPayments = async (req, res) => {
       }).distinct("_id");
 
       filteredProjectIds = filteredProjectIds
+        // When both client and text search are present, apply intersection semantics.
         ? filteredProjectIds.filter((id) => searchProjectIds.some((searchId) => String(searchId) === String(id)))
         : searchProjectIds;
     }
@@ -288,6 +292,7 @@ export const updatePayment = async (req, res) => {
       updateData.paidAmount = normalizedPaidAmount;
     }
 
+    // Save document instance to preserve pre-save status/due recalculation hooks.
     payment.set(updateData);
     await payment.save();
 
@@ -341,6 +346,7 @@ export const deletePayment = async (req, res) => {
 // @access  Private
 export const getPaymentStats = async (req, res) => {
   try {
+    // Aggregation compares BSON values, so convert auth user id to ObjectId explicitly.
     const userObjectId = new mongoose.Types.ObjectId(req.user.id);
 
     const [
@@ -491,6 +497,7 @@ export const addPayment = async (req, res) => {
       return sendBadRequestError(res, "Please provide a valid positive amount");
     }
 
+    // Atomic increment prevents overpayment races under concurrent requests.
     const updatedPayment = await Payment.findOneAndUpdate(
       {
         _id: id,
@@ -500,6 +507,7 @@ export const addPayment = async (req, res) => {
         },
       },
       [
+        // Pipeline update keeps derived fields (dueAmount/status) in sync in the same write.
         {
           $set: {
             paidAmount: { $add: ["$paidAmount", normalizedAmount] },
