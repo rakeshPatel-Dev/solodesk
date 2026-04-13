@@ -27,7 +27,7 @@ export const createTask = async (req, res) => {
     const project = await Project.findOne({
       _id: projectId,
       userId: req.user.id,
-    }).populate("clientId", "name email company");
+    }).populate("clientId", "name email");
 
     if (!project) {
       return sendNotFoundError(res, "Project not found or you don't have permission");
@@ -522,7 +522,7 @@ export const getTasksByProject = async (req, res) => {
     const project = await Project.findOne({
       _id: projectId,
       userId: req.user.id,
-    }).populate("clientId", "name email company");
+    }).populate("clientId", "name email");
 
     if (!project) {
       return sendNotFoundError(res, "Project not found");

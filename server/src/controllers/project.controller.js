@@ -74,7 +74,7 @@ export const createProject = async (req, res) => {
     // Populate client info for response
     const populatedProject = await Project.findById(project._id).populate(
       "clientId",
-      "name email company phone"
+      "name email phone"
     );
 
     res.status(201).json({
@@ -175,7 +175,7 @@ export const getProjects = async (req, res) => {
         .sort(sort)
         .skip(skip)
         .limit(limitNum)
-        .populate("clientId", "name email company phone status")
+        .populate("clientId", "name email phone status")
         .populate("userId", "name email"),
       Project.countDocuments(query),
     ]);
@@ -209,7 +209,7 @@ export const getProjectById = async (req, res) => {
       _id: id,
       userId: req.user.id,
     })
-      .populate("clientId", "name email company phone address status")
+      .populate("clientId", "name email phone address status")
       .populate("userId", "name email");
 
     if (!project) {
@@ -304,7 +304,7 @@ export const updateProject = async (req, res) => {
         deadline: newDeadline,
       },
       { new: true, runValidators: true }
-    ).populate("clientId", "name email company phone");
+    ).populate("clientId", "name email phone");
 
     res.status(200).json({
       success: true,
@@ -545,7 +545,7 @@ export const searchProjects = async (req, res) => {
       ],
     })
       .limit(limitNum)
-      .populate("clientId", "name email company")
+      .populate("clientId", "name email")
       .select("name status budget clientId type")
       .sort({ name: 1 });
 
@@ -581,7 +581,7 @@ export const getUpcomingDeadlines = async (req, res) => {
       status: { $ne: "Completed" },
     })
       .sort({ deadline: 1 })
-      .populate("clientId", "name email company")
+      .populate("clientId", "name email")
       .select("name deadline status budget clientId");
 
     res.status(200).json({

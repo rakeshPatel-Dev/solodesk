@@ -16,7 +16,7 @@ import {
 // @access  Private
 export const createClient = async (req, res) => {
   try {
-    const { name, address, email, phone, company, notes, status } = req.body;
+    const { name, address, email, phone, notes, status } = req.body;
 
     const existingClient = await Client.findOne({
       name,
@@ -43,7 +43,6 @@ export const createClient = async (req, res) => {
       address,
       email,
       phone,
-      company,
       notes,
       status: status || "Active",
     });
@@ -83,7 +82,6 @@ export const getClients = async (req, res) => {
       query.$or = [
         { name: { $regex: escapedSearch, $options: "i" } },
         { email: { $regex: escapedSearch, $options: "i" } },
-        { company: { $regex: escapedSearch, $options: "i" } },
         { phone: { $regex: escapedSearch, $options: "i" } },
       ];
     }
@@ -152,7 +150,7 @@ export const getClientById = async (req, res) => {
 export const updateClient = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, address, email, phone, company, notes, status } = req.body;
+    const { name, address, email, phone, notes, status } = req.body;
 
     if (!validateObjectIdOrRespond(res, id, "client ID")) return;
 
@@ -194,7 +192,6 @@ export const updateClient = async (req, res) => {
         address: address !== undefined ? address : client.address,
         email: email !== undefined ? email : client.email,
         phone: phone !== undefined ? phone : client.phone,
-        company: company !== undefined ? company : client.company,
         notes: notes !== undefined ? notes : client.notes,
         status: status || client.status,
       },
@@ -251,7 +248,7 @@ export const getClientStats = async (req, res) => {
         Client.find({ userId: req.user.id })
           .sort({ createdAt: -1 })
           .limit(5)
-          .select("name email company status createdAt"),
+          .select("name email status createdAt"),
       ]);
 
     res.status(200).json({
@@ -347,12 +344,11 @@ export const searchClients = async (req, res) => {
       $or: [
         { name: searchRegex },
         { email: searchRegex },
-        { company: searchRegex },
         { phone: searchRegex },
       ],
     })
       .limit(limitNum)
-      .select("name email company phone status")
+      .select("name email phone status")
       .sort({ name: 1 });
 
     res.status(200).json({

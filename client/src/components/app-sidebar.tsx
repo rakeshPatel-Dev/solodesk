@@ -24,6 +24,7 @@ import {
   SettingsIcon,
 } from "lucide-react"
 import { Separator } from "./ui/separator"
+import { Link } from "react-router-dom"
 
 // This is sample data.
 const data = {
@@ -122,8 +123,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild size="lg" tooltip="Solodesk">
-              <a href="/dashboard" className="gap-3">
+              <Link to="/dashboard" className="gap-3">
                 <img
+                  loading="lazy"
                   src="/solodesk logo.svg"
                   alt="Solodesk logo"
                   className="size-8 rounded-md object-contain"
@@ -131,10 +133,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <div className="grid text-left leading-tight">
                   <span className="truncate font-semibold">Solodesk</span>
                   <span className="truncate text-xs text-muted-foreground">
-                    Freelance management System
+                    Freelance Management System
                   </span>
                 </div>
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

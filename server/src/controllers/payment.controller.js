@@ -65,7 +65,7 @@ export const createPayment = async (req, res) => {
       .populate({
         path: "projectId",
         select: "name status budget clientId startDate deadline",
-        populate: { path: "clientId", select: "name email company phone" },
+        populate: { path: "clientId", select: "name email phone" },
       })
       .populate("userId", "name email");
 
@@ -195,7 +195,7 @@ export const getPayments = async (req, res) => {
         .populate({
           path: "projectId",
           select: "name status budget clientId startDate deadline",
-          populate: { path: "clientId", select: "name email company phone" },
+          populate: { path: "clientId", select: "name email phone" },
         })
         .populate("userId", "name email"),
       Payment.countDocuments(query),
@@ -232,7 +232,7 @@ export const getPaymentById = async (req, res) => {
       .populate({
         path: "projectId",
         select: "name status budget description clientId startDate deadline",
-        populate: { path: "clientId", select: "name email company phone address" },
+        populate: { path: "clientId", select: "name email phone address" },
       })
       .populate("userId", "name email");
 
@@ -300,7 +300,7 @@ export const updatePayment = async (req, res) => {
       .populate({
         path: "projectId",
         select: "name status budget clientId startDate deadline",
-        populate: { path: "clientId", select: "name email company phone" },
+        populate: { path: "clientId", select: "name email phone" },
       })
       .populate("userId", "name email");
 
@@ -377,7 +377,7 @@ export const getPaymentStats = async (req, res) => {
         .populate({
           path: "projectId",
           select: "name clientId",
-          populate: { path: "clientId", select: "name company" },
+          populate: { path: "clientId", select: "name" },
         })
         .select("totalAmount paidAmount dueAmount status projectId updatedAt"),
       Payment.aggregate([
@@ -447,7 +447,7 @@ export const getPaymentByProject = async (req, res) => {
     const project = await Project.findOne({
       _id: projectId,
       userId: req.user.id,
-    }).populate("clientId", "name email company phone");
+    }).populate("clientId", "name email phone");
 
     if (!project) {
       return sendNotFoundError(res, "Project not found or you don't have permission");
@@ -460,7 +460,7 @@ export const getPaymentByProject = async (req, res) => {
       .populate({
         path: "projectId",
         select: "name status budget description startDate deadline clientId",
-        populate: { path: "clientId", select: "name email company phone" },
+        populate: { path: "clientId", select: "name email phone" },
       })
       .populate("userId", "name email");
 
@@ -533,7 +533,7 @@ export const addPayment = async (req, res) => {
       .populate({
         path: "projectId",
         select: "name status budget clientId",
-        populate: { path: "clientId", select: "name email company phone" },
+        populate: { path: "clientId", select: "name email phone" },
       })
       .populate("userId", "name email");
 
@@ -591,7 +591,7 @@ export const getOverduePayments = async (req, res) => {
       .populate({
         path: "projectId",
         select: "name deadline status clientId",
-        populate: { path: "clientId", select: "name email company phone" },
+        populate: { path: "clientId", select: "name email phone" },
       })
       .sort({ updatedAt: -1 });
 

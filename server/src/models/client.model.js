@@ -33,10 +33,6 @@ const clientSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    company: {
-      type: String,
-      trim: true,
-    },
     notes: {
       type: String,
       maxlength: 1000,
