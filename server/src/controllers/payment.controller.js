@@ -53,11 +53,6 @@ export const createPayment = async (req, res) => {
       return sendNotFoundError(res, "Project not found or you don't have permission");
     }
 
-    const existingPayment = await Payment.findOne({ projectId, userId: req.user.id });
-    if (existingPayment) {
-      return sendConflictError(res, "Payment record already exists for this project. Use update endpoint instead.");
-    }
-
     const payment = await Payment.create({
       projectId,
       totalAmount: normalizedTotalAmount,
@@ -78,6 +73,10 @@ export const createPayment = async (req, res) => {
       data: populatedPayment,
     });
   } catch (error) {
+    if (error?.code === 11000) {
+      return sendConflictError(res, "Payment record already exists for this project. Use update endpoint instead.");
+    }
+
     return sendServerError(res, "Create payment error", error, "Server error while creating payment record");
   }
 };
@@ -114,9 +113,20 @@ export const getPayments = async (req, res) => {
     }
 
     if (fromDate || toDate) {
+      const fromDateObj = fromDate ? new Date(fromDate) : null;
+      const toDateObj = toDate ? new Date(toDate) : null;
+
+      if (fromDateObj && Number.isNaN(fromDateObj.getTime())) {
+        return sendBadRequestError(res, "fromDate must be a valid date");
+      }
+
+      if (toDateObj && Number.isNaN(toDateObj.getTime())) {
+        return sendBadRequestError(res, "toDate must be a valid date");
+      }
+
       query.createdAt = {};
-      if (fromDate) query.createdAt.$gte = new Date(fromDate);
-      if (toDate) query.createdAt.$lte = new Date(toDate);
+      if (fromDateObj) query.createdAt.$gte = fromDateObj;
+      if (toDateObj) query.createdAt.$lte = toDateObj;
     }
 
     const normalizedMinAmount = toPositiveNumberOrNull(minAmount);
@@ -481,33 +491,47 @@ export const addPayment = async (req, res) => {
       return sendBadRequestError(res, "Please provide a valid positive amount");
     }
 
-    const payment = await Payment.findOne({
-      _id: id,
-      userId: req.user.id,
-    });
-
-    if (!payment) {
-      return sendNotFoundError(res, "Payment record not found");
-    }
-
-    const newPaidAmount = payment.paidAmount + normalizedAmount;
-    if (newPaidAmount > payment.totalAmount) {
-      return sendBadRequestError(
-        res,
-        `Payment amount exceeds remaining balance. Remaining: ${payment.totalAmount - payment.paidAmount}`
-      );
-    }
-
-    payment.paidAmount = newPaidAmount;
-    await payment.save();
-
-    const updatedPayment = await Payment.findById(id)
+    const updatedPayment = await Payment.findOneAndUpdate(
+      {
+        _id: id,
+        userId: req.user.id,
+        $expr: {
+          $lte: [{ $add: ["$paidAmount", normalizedAmount] }, "$totalAmount"],
+        },
+      },
+      [
+        {
+          $set: {
+            paidAmount: { $add: ["$paidAmount", normalizedAmount] },
+          },
+        },
+        {
+          $set: {
+            dueAmount: { $subtract: ["$totalAmount", "$paidAmount"] },
+            status: {
+              $switch: {
+                branches: [
+                  { case: { $eq: ["$paidAmount", 0] }, then: "Unpaid" },
+                  { case: { $lt: ["$paidAmount", "$totalAmount"] }, then: "Partial" },
+                ],
+                default: "Paid",
+              },
+            },
+          },
+        },
+      ],
+      { new: true }
+    )
       .populate({
         path: "projectId",
         select: "name status budget clientId",
         populate: { path: "clientId", select: "name email company phone" },
       })
       .populate("userId", "name email");
+
+    if (!updatedPayment) {
+      return sendBadRequestError(res, "Payment amount exceeds remaining balance");
+    }
 
     return res.status(200).json({
       success: true,

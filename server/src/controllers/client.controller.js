@@ -1,6 +1,5 @@
 // controllers/client.controller.js
-import Client from "../models/client.model.js"; import Client from "../models/client.model.js";
-import {
+import Client from "../models/client.model.js"; import {
   sendBadRequestError,
   sendNotFoundError,
   sendServerError,

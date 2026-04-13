@@ -54,6 +54,9 @@ paymentSchema.pre("save", function (next) {
   next();
 });
 
+// Enforce one payment record per project per user at DB level.
+paymentSchema.index({ projectId: 1, userId: 1 }, { unique: true });
+
 const Payment = mongoose.models.Payment || mongoose.model("Payment", paymentSchema);
 
 export default Payment;
