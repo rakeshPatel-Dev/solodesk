@@ -49,6 +49,17 @@ export const createTask = async (req, res) => {
       return sendBadRequestError(res, "A task with this title already exists in this project");
     }
 
+    const allowedStatuses = Task.schema.path("status").enumValues;
+    const allowedPriorities = Task.schema.path("priority").enumValues;
+
+    if (status !== undefined && !allowedStatuses.includes(status)) {
+      return sendBadRequestError(res, "Invalid status");
+    }
+
+    if (priority !== undefined && !allowedPriorities.includes(priority)) {
+      return sendBadRequestError(res, "Invalid priority");
+    }
+
     // Create task
     const task = await Task.create({
       projectId,
@@ -117,14 +128,18 @@ export const getTasks = async (req, res) => {
       ];
     }
 
+    // Allowed sort fields
+    const allowedSortFields = ["createdAt", "updatedAt", "title", "priority", "status"];
+    const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : "createdAt";
+
     // Pagination
-    const pageNum = parseInt(page, 10);
-    const limitNum = parseInt(limit, 10);
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
     const skip = (pageNum - 1) * limitNum;
 
     // Sorting
     const sort = {};
-    sort[sortBy] = sortOrder === "desc" ? -1 : 1;
+    sort[safeSortBy] = sortOrder === "asc" ? 1 : -1;
 
     // Execute queries
     const [tasks, total] = await Promise.all([
@@ -514,15 +529,48 @@ export const getTasksByProject = async (req, res) => {
     }
 
     // Build query
-    const query = { projectId, userId: req.user.id };
+    const query = {
+      projectId: new mongoose.Types.ObjectId(projectId),
+      userId: new mongoose.Types.ObjectId(req.user.id),
+    };
     if (status && status !== "all") {
       query.status = status;
     }
 
-    const tasks = await Task.find(query)
-      .sort({ priority: -1, createdAt: 1 }) // High priority first
-      .populate("projectId", "name status")
-      .select("title description status priority createdAt updatedAt");
+    const tasksWithPriorityOrder = await Task.aggregate([
+      { $match: query },
+      {
+        $addFields: {
+          priorityOrder: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$priority", "High"] }, then: 3 },
+                { case: { $eq: ["$priority", "Medium"] }, then: 2 },
+                { case: { $eq: ["$priority", "Low"] }, then: 1 },
+              ],
+              default: 0,
+            },
+          },
+        },
+      },
+      { $sort: { priorityOrder: -1, createdAt: 1 } },
+      {
+        $project: {
+          title: 1,
+          description: 1,
+          status: 1,
+          priority: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          projectId: 1,
+        },
+      },
+    ]);
+
+    const tasks = await Task.populate(tasksWithPriorityOrder, {
+      path: "projectId",
+      select: "name status",
+    });
 
     // Group tasks by status for Kanban view
     const kanbanData = {
@@ -599,7 +647,7 @@ export const searchTasks = async (req, res) => {
     // Escape user input to prevent regex ReDoS attack
     const escapedSearch = escapeRegex(q);
     const searchRegex = new RegExp(escapedSearch, "i");
-    const limitNum = parseInt(limit, 10);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
 
     const tasks = await Task.find({
       userId: req.user.id,

@@ -1,4 +1,4 @@
-// routes/task.routes.js
+// routes/task.route.js
 import express from "express";
 import { authenticateUser as protect } from "../middlewares/auth.middleware.js";
 import {
@@ -26,7 +26,7 @@ router.get("/stats", getTaskStats);
 router.get("/search", searchTasks);
 
 // Bulk operations
-router.delete("/bulk", bulkDeleteTasks);
+router.post("/bulk/delete", bulkDeleteTasks);
 router.patch("/bulk/status", bulkUpdateTaskStatus);
 
 // Get tasks by project
