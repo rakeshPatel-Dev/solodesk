@@ -1,6 +1,6 @@
 // routes/client.routes.js
 import express from "express";
-import { authenticateUser } from "../middlewares/auth.middleware.js";
+import { authenticateUser as protect } from "../middlewares/auth.middleware.js";
 import {
   createClient,
   getClients,
@@ -16,7 +16,7 @@ import {
 const router = express.Router();
 
 // All client routes require authentication
-router.use(authenticateUser);
+router.use(protect);
 
 // Stats and search routes (must be before /:id routes)
 router.get("/stats", getClientStats);

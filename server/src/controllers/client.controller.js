@@ -1,7 +1,14 @@
 // controllers/client.controller.js
 import Client from "../models/client.model.js";
-import { sendServerError } from "../utils/sendError.js";
-import { isValidObjectId, isValidObjectIdArray } from "../validators/objectIdValidator.js";
+import {
+  sendBadRequestError,
+  sendNotFoundError,
+  sendServerError,
+} from "../utils/sendError.js";
+import {
+  validateObjectIdOrRespond,
+  validateObjectIdArrayOrRespond,
+} from "../validators/objectIdValidator.js";
 
 // @desc    Create a new client
 // @route   POST /api/clients
@@ -17,10 +24,7 @@ export const createClient = async (req, res) => {
     });
 
     if (existingClient) {
-      return res.status(400).json({
-        success: false,
-        message: "You already have a client with this name",
-      });
+      return sendBadRequestError(res, "You already have a client with this name");
     }
 
     // Check if email already exists for this user (if email provided)
@@ -30,10 +34,7 @@ export const createClient = async (req, res) => {
         userId: req.user.id,
       });
       if (emailExists) {
-        return res.status(400).json({
-          success: false,
-          message: "A client with this email already exists",
-        });
+        return sendBadRequestError(res, "A client with this email already exists");
       }
     }
 
@@ -132,12 +133,7 @@ export const getClientById = async (req, res) => {
     const { id } = req.params;
 
     // Validate ObjectId
-    if (!isValidObjectId(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid client ID format",
-      });
-    }
+    if (!validateObjectIdOrRespond(res, id, "client ID")) return;
 
     const client = await Client.findOne({
       _id: id,
@@ -145,10 +141,7 @@ export const getClientById = async (req, res) => {
     }).populate("userId", "name email");
 
     if (!client) {
-      return res.status(404).json({
-        success: false,
-        message: "Client not found",
-      });
+      return sendNotFoundError(res, "Client not found");
     }
 
     res.status(200).json({
@@ -169,12 +162,7 @@ export const updateClient = async (req, res) => {
     const { name, address, email, phone, company, notes, status } = req.body;
 
     // Validate ObjectId
-    if (!isValidObjectId(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid client ID format",
-      });
-    }
+    if (!validateObjectIdOrRespond(res, id, "client ID")) return;
 
     // Check if client exists and belongs to user
     const client = await Client.findOne({
@@ -183,10 +171,7 @@ export const updateClient = async (req, res) => {
     });
 
     if (!client) {
-      return res.status(404).json({
-        success: false,
-        message: "Client not found",
-      });
+      return sendNotFoundError(res, "Client not found");
     }
 
     // Check for duplicate name (excluding current client)
@@ -197,10 +182,7 @@ export const updateClient = async (req, res) => {
         _id: { $ne: id },
       });
       if (nameExists) {
-        return res.status(400).json({
-          success: false,
-          message: "Another client with this name already exists",
-        });
+        return sendBadRequestError(res, "Another client with this name already exists");
       }
     }
 
@@ -212,10 +194,7 @@ export const updateClient = async (req, res) => {
         _id: { $ne: id },
       });
       if (emailExists) {
-        return res.status(400).json({
-          success: false,
-          message: "Another client with this email already exists",
-        });
+        return sendBadRequestError(res, "Another client with this email already exists");
       }
     }
 
@@ -231,7 +210,7 @@ export const updateClient = async (req, res) => {
         notes: notes !== undefined ? notes : client.notes,
         status: status || client.status,
       },
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     );
 
     res.status(200).json({
@@ -251,12 +230,7 @@ export const deleteClient = async (req, res) => {
     const { id } = req.params;
 
     // Validate ObjectId
-    if (!isValidObjectId(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid client ID format",
-      });
-    }
+    if (!validateObjectIdOrRespond(res, id, "client ID")) return;
 
     const client = await Client.findOneAndDelete({
       _id: id,
@@ -264,10 +238,7 @@ export const deleteClient = async (req, res) => {
     });
 
     if (!client) {
-      return res.status(404).json({
-        success: false,
-        message: "Client not found",
-      });
+      return sendNotFoundError(res, "Client not found");
     }
 
     res.status(200).json({
@@ -317,20 +288,7 @@ export const bulkDeleteClients = async (req, res) => {
   try {
     const { clientIds } = req.body;
 
-    if (!clientIds || !Array.isArray(clientIds) || clientIds.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Please provide an array of client IDs",
-      });
-    }
-
-    const allIdsAreValid = isValidObjectIdArray(clientIds);
-    if (!allIdsAreValid) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid client ID format",
-      });
-    }
+    if (!validateObjectIdArrayOrRespond(res, clientIds, "client IDs")) return;
 
     const result = await Client.deleteMany({
       _id: { $in: clientIds },
@@ -358,31 +316,20 @@ export const updateClientStatus = async (req, res) => {
     const { status } = req.body;
 
     if (!status || !["Active", "Inactive"].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: "Status must be either 'Active' or 'Inactive'",
-      });
+      return sendBadRequestError(res, "Status must be either 'Active' or 'Inactive'");
     }
 
     // Validate ObjectId
-    if (!isValidObjectId(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid client ID format",
-      });
-    }
+    if (!validateObjectIdOrRespond(res, id, "client ID")) return;
 
     const client = await Client.findOneAndUpdate(
       { _id: id, userId: req.user.id },
       { status },
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     );
 
     if (!client) {
-      return res.status(404).json({
-        success: false,
-        message: "Client not found",
-      });
+      return sendNotFoundError(res, "Client not found");
     }
 
     res.status(200).json({
@@ -402,10 +349,7 @@ export const searchClients = async (req, res) => {
     const { q, limit = 20 } = req.query;
 
     if (!q || q.trim().length < 2) {
-      return res.status(400).json({
-        success: false,
-        message: "Search query must be at least 2 characters",
-      });
+      return sendBadRequestError(res, "Search query must be at least 2 characters");
     }
 
     const searchRegex = new RegExp(q, "i");

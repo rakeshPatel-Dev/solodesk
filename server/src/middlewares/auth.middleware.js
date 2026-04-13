@@ -1,6 +1,11 @@
 // middleware/auth.middleware.js
 import jwt from "jsonwebtoken";
 import User from "../models/user.model.js";
+import {
+  sendUnauthorizedError,
+  sendForbiddenError,
+  sendServerError,
+} from "../utils/sendError.js";
 
 export const authenticateUser = async (req, res, next) => {
   try {
@@ -12,17 +17,11 @@ export const authenticateUser = async (req, res, next) => {
     const token = cookieToken || bearerToken;
 
     if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: "Authentication required. Please log in."
-      });
+      return sendUnauthorizedError(res, "Authentication required. Please log in.");
     }
 
     if (!process.env.JWT_SECRET) {
-      return res.status(500).json({
-        success: false,
-        message: "Server auth configuration error."
-      });
+      return sendServerError(res, "Auth middleware config error", new Error("Missing JWT_SECRET"), "Server auth configuration error.");
     }
 
     // Verify token
@@ -31,17 +30,11 @@ export const authenticateUser = async (req, res, next) => {
     // Verify User still exists and is active
     const user = await User.findById(decoded.id).select("_id name email role isActive");
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "User no longer exists."
-      });
+      return sendUnauthorizedError(res, "User no longer exists.");
     }
 
     if (!user.isActive) {
-      return res.status(403).json({
-        success: false,
-        message: "Account is deactivated. Please contact support."
-      });
+      return sendForbiddenError(res, "Account is deactivated. Please contact support.");
     }
 
     // Attach only safe fields used by downstream handlers
@@ -58,22 +51,13 @@ export const authenticateUser = async (req, res, next) => {
     console.error("❌ Auth middleware error:", error);
 
     if (error.name === "JsonWebTokenError") {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid token. Please log in again."
-      });
+      return sendUnauthorizedError(res, "Invalid token. Please log in again.");
     }
 
     if (error.name === "TokenExpiredError") {
-      return res.status(401).json({
-        success: false,
-        message: "Token expired. Please log in again."
-      });
+      return sendUnauthorizedError(res, "Token expired. Please log in again.");
     }
 
-    return res.status(500).json({
-      success: false,
-      message: "Authentication failed."
-    });
+    return sendServerError(res, "Auth middleware error", error, "Authentication failed.");
   }
 };

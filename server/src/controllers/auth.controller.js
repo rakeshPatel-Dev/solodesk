@@ -10,7 +10,14 @@ import { generateToken, generateResetToken } from "../utils/generateToken.js";
 import { validatePasswordStrength } from "../validators/passwordValidator.js";
 import { isValidEmail } from "../validators/emailValidator.js";
 import { setAuthCookie } from "../utils/setCookie.js";
-import { sendServerError } from "../utils/sendError.js";
+import {
+  sendBadRequestError,
+  sendUnauthorizedError,
+  sendForbiddenError,
+  sendNotFoundError,
+  sendConflictError,
+  sendServerError,
+} from "../utils/sendError.js";
 
 
 const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CLIENT_URL || "http://localhost:5173";
@@ -24,43 +31,28 @@ export const register = async (req, res) => {
 
     // Input validation
     if (!name || !name.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Name is required",
-      });
+      return sendBadRequestError(res, "Name is required");
     }
 
     if (!email || !isValidEmail(email)) {
-      return res.status(400).json({
-        success: false,
-        message: "Valid email is required",
-      });
+      return sendBadRequestError(res, "Valid email is required");
     }
 
     if (!password) {
-      return res.status(400).json({
-        success: false,
-        message: "Password is required",
-      });
+      return sendBadRequestError(res, "Password is required");
     }
 
     // Validate password strength
     const passwordValidation = validatePasswordStrength(password);
     if (!passwordValidation.valid) {
-      return res.status(400).json({
-        success: false,
-        message: passwordValidation.message,
-      });
+      return sendBadRequestError(res, passwordValidation.message);
     }
 
     // Check if user already exists
     const normalizedEmail = email.toLowerCase().trim();
     const userExists = await User.findOne({ email: normalizedEmail });
     if (userExists) {
-      return res.status(409).json({
-        success: false,
-        message: "User already exists with this email",
-      });
+      return sendConflictError(res, "User already exists with this email");
     }
 
     // Hash password
@@ -107,44 +99,29 @@ export const login = async (req, res) => {
 
     // Input validation
     if (!email || !isValidEmail(email)) {
-      return res.status(400).json({
-        success: false,
-        message: "Valid email is required",
-      });
+      return sendBadRequestError(res, "Valid email is required");
     }
 
     if (!password) {
-      return res.status(400).json({
-        success: false,
-        message: "Password is required",
-      });
+      return sendBadRequestError(res, "Password is required");
     }
 
     // Check if user exists and include password field
     const user = await User.findOne({ email: email.toLowerCase().trim() }).select("+password");
 
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      });
+      return sendUnauthorizedError(res, "Invalid credentials");
     }
 
     // Check if account is active
     if (!user.isActive) {
-      return res.status(403).json({
-        success: false,
-        message: "Account is deactivated. Please contact support.",
-      });
+      return sendForbiddenError(res, "Account is deactivated. Please contact support.");
     }
 
     // Check password
     const isPasswordMatch = await bcrypt.compare(password, user.password);
     if (!isPasswordMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      });
+      return sendUnauthorizedError(res, "Invalid credentials");
     }
 
     // Update last login
@@ -181,10 +158,7 @@ export const getMe = async (req, res) => {
     const user = await User.findById(req.user.id).select("-resetPasswordToken -resetPasswordExpiry");
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return sendNotFoundError(res, "User not found");
     }
 
     res.status(200).json({
@@ -204,10 +178,7 @@ export const forgotPassword = async (req, res) => {
     const { email } = req.body;
 
     if (!email || !isValidEmail(email)) {
-      return res.status(400).json({
-        success: false,
-        message: "Valid email is required",
-      });
+      return sendBadRequestError(res, "Valid email is required");
     }
 
     const normalizedEmail = email?.toLowerCase()?.trim();
@@ -260,19 +231,13 @@ export const resetPassword = async (req, res) => {
 
     // Input validation
     if (!password) {
-      return res.status(400).json({
-        success: false,
-        message: "Password is required",
-      });
+      return sendBadRequestError(res, "Password is required");
     }
 
     // Validate password strength
     const passwordValidation = validatePasswordStrength(password);
     if (!passwordValidation.valid) {
-      return res.status(400).json({
-        success: false,
-        message: passwordValidation.message,
-      });
+      return sendBadRequestError(res, passwordValidation.message);
     }
 
     // Hash the received token to compare with stored hash
@@ -287,10 +252,7 @@ export const resetPassword = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid or expired reset token",
-      });
+      return sendBadRequestError(res, "Invalid or expired reset token");
     }
 
     // Hash new password
@@ -321,52 +283,34 @@ export const changePassword = async (req, res) => {
 
     // Input validation
     if (!currentPassword) {
-      return res.status(400).json({
-        success: false,
-        message: "Current password is required",
-      });
+      return sendBadRequestError(res, "Current password is required");
     }
 
     if (!newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: "New password is required",
-      });
+      return sendBadRequestError(res, "New password is required");
     }
 
     if (currentPassword === newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: "New password must be different from current password",
-      });
+      return sendBadRequestError(res, "New password must be different from current password");
     }
 
     // Validate new password strength
     const passwordValidation = validatePasswordStrength(newPassword);
     if (!passwordValidation.valid) {
-      return res.status(400).json({
-        success: false,
-        message: passwordValidation.message,
-      });
+      return sendBadRequestError(res, passwordValidation.message);
     }
 
     // Get user with password field
     const user = await User.findById(req.user.id).select("+password");
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return sendNotFoundError(res, "User not found");
     }
 
     // Check current password
     const isPasswordMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isPasswordMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Current password is incorrect",
-      });
+      return sendUnauthorizedError(res, "Current password is incorrect");
     }
 
     // Hash new password
@@ -415,18 +359,12 @@ export const deactivateAccount = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return sendNotFoundError(res, "User not found");
     }
 
     // Check if account is already deactivated
     if (!user.isActive) {
-      return res.status(400).json({
-        success: false,
-        message: "Account is already deactivated",
-      });
+      return sendBadRequestError(res, "Account is already deactivated");
     }
 
     user.isActive = false;
@@ -451,10 +389,7 @@ export const deleteAccount = async (req, res) => {
 
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return sendNotFoundError(res, "User not found");
     }
 
     const userProjects = await Project.find({ userId }).select("_id");

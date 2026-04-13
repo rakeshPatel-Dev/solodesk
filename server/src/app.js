@@ -3,6 +3,14 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth.route.js";
 import clientRoutes from "./routes/client.route.js";
+import {
+  sendBadRequestError,
+  sendUnauthorizedError,
+  sendForbiddenError,
+  sendNotFoundError,
+  sendConflictError,
+  sendServerError,
+} from "./utils/sendError.js";
 
 
 const app = express();
@@ -33,26 +41,35 @@ app.get("/", (req, res) => {
 });
 
 app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: "Route not found",
-  });
+  return sendNotFoundError(res, "Route not found");
 });
 
 app.use((err, req, res, next) => {
   if (err?.message === "Not allowed by CORS") {
-    return res.status(403).json({
-      success: false,
-      message: "CORS policy does not allow this origin",
-    });
+    return sendForbiddenError(res, "CORS policy does not allow this origin");
   }
 
-  const isProduction = process.env.NODE_ENV === "production";
-  return res.status(err?.statusCode || 500).json({
-    success: false,
-    message: err?.message || "Internal server error",
-    ...(isProduction ? {} : { error: err?.stack || String(err) }),
-  });
+  if (err?.statusCode === 400) {
+    return sendBadRequestError(res, err?.message || "Bad request");
+  }
+
+  if (err?.statusCode === 401) {
+    return sendUnauthorizedError(res, err?.message || "Unauthorized");
+  }
+
+  if (err?.statusCode === 403) {
+    return sendForbiddenError(res, err?.message || "Forbidden");
+  }
+
+  if (err?.statusCode === 404) {
+    return sendNotFoundError(res, err?.message || "Not found");
+  }
+
+  if (err?.statusCode === 409) {
+    return sendConflictError(res, err?.message || "Conflict");
+  }
+
+  return sendServerError(res, "App error handler", err, err?.message || "Internal server error");
 });
 
 export default app;
