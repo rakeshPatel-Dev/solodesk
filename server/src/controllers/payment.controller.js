@@ -497,6 +497,15 @@ export const addPayment = async (req, res) => {
       return sendBadRequestError(res, "Please provide a valid positive amount");
     }
 
+    const existingPayment = await Payment.findOne({
+      _id: id,
+      userId: req.user.id,
+    }).select("_id");
+
+    if (!existingPayment) {
+      return sendNotFoundError(res, "Payment record not found or you don't have permission");
+    }
+
     // Atomic increment prevents overpayment races under concurrent requests.
     const updatedPayment = await Payment.findOneAndUpdate(
       {
@@ -538,6 +547,12 @@ export const addPayment = async (req, res) => {
       .populate("userId", "name email");
 
     if (!updatedPayment) {
+      // If the document vanished between checks, surface not-found instead of balance error.
+      const paymentStillExists = await Payment.exists({ _id: id, userId: req.user.id });
+      if (!paymentStillExists) {
+        return sendNotFoundError(res, "Payment record not found or you don't have permission");
+      }
+
       return sendBadRequestError(res, "Payment amount exceeds remaining balance");
     }
 
