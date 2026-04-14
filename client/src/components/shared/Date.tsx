@@ -1,12 +1,16 @@
 import { useMemo } from 'react'
 
 const DateComponent = () => {
-  const currentDate = useMemo(() => {
-    return new Date().toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })
+  const { displayDate, isoDate } = useMemo(() => {
+    const now = new Date()
+    return {
+      displayDate: now.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }),
+      isoDate: now.toISOString().split('T')[0],
+    }
   }, [])
 
   return (
@@ -16,10 +20,10 @@ const DateComponent = () => {
       </span>
       <span className="h-4 w-px bg-neutral-300 dark:bg-neutral-700" />
       <time
-        dateTime={new Date().toISOString().split('T')[0]}
+        dateTime={isoDate}
         className="text-base font-semibold text-neutral-700 dark:text-neutral-300"
       >
-        {currentDate}
+        {displayDate}
       </time>
     </div>
   )

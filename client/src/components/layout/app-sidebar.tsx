@@ -129,7 +129,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenuButton asChild size="lg" tooltip="Solodesk">
               <Link to="/dashboard" className="gap-3">
                 <img
-                  src="/solodesk logo.svg"
+                  src="/solodesk-logo.svg"
                   alt="Solodesk logo"
                   className="size-8 rounded-md object-contain"
                 />
