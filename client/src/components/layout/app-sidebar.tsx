@@ -2,8 +2,8 @@
 
 import * as React from "react"
 
-import { NavMain } from "@/components/nav-main"
-import { NavUser } from "@/components/nav-user"
+import { NavMain } from "@/components/sidebar/nav-main"
+import { NavUser } from "@/components/sidebar/nav-user"
 import {
   Sidebar,
   SidebarContent,
@@ -23,7 +23,7 @@ import {
   BarChart3Icon,
   SettingsIcon,
 } from "lucide-react"
-import { Separator } from "./ui/separator"
+import { Separator } from "../ui/separator"
 import { Link } from "react-router-dom"
 
 // This is sample data.
@@ -104,6 +104,10 @@ const data = {
           title: "All Tasks",
           url: "/tasks",
         },
+        {
+          title: "Add Tasks",
+          url: "/tasks/new",
+        },
       ],
     },
     {
@@ -148,10 +152,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild tooltip="Settings">
-              <a href="/settings">
+              <Link to="/settings">
                 <SettingsIcon />
                 <span>Settings</span>
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

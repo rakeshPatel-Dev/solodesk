@@ -1,17 +1,32 @@
-import React from 'react'
+import StatsCard from '@/components/shared/StatsCard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { BadgeDollarSign, ClipboardList, FolderKanban, Users } from 'lucide-react'
 
 const Dashboard = () => {
+
+
+  const stats = [
+    { title: 'Total Clients', value: 120, icon: Users, subTitle: '10 new this month', trend: '+12.4%' },
+    { title: 'Total Projects', value: 120, icon: FolderKanban, subTitle: '10 new this month', trend: '+8.1%' },
+    { title: 'Total Payments', value: 120, icon: BadgeDollarSign, subTitle: '10 new this month', trend: '+16.7%' },
+    { title: 'Total Tasks', value: 120, icon: ClipboardList, subTitle: '10 new this month', trend: '+6.3%' },
+  ]
+
   return (
-    <div className="mx-auto w-full max-w-4xl">
-      <Card>
-        <CardHeader>
-          <CardTitle>Dashboard</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          Use the sidebar to navigate clients, projects, payments, tasks, reports, and settings.
-        </CardContent>
-      </Card>
+    <div className="mx-auto w-full px-10">
+      <div>
+        <h1 className="text-4xl font-bold ">Dashboard</h1>
+        <p>You have 10 new clients this month</p>
+
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {stats.map((stat) => (
+          <StatsCard stat={stat} />
+        ))}
+      </div>
+
+
     </div>
   )
 }
