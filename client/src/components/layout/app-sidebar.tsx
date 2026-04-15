@@ -40,7 +40,6 @@ const data = {
       icon: (
         <HouseIcon />
       ),
-      isActive: true,
     },
     {
       title: "Clients",
@@ -48,16 +47,6 @@ const data = {
       icon: (
         <UsersIcon />
       ),
-      items: [
-        {
-          title: "All Clients",
-          url: "/clients",
-        },
-        {
-          title: "Add Client",
-          url: "/clients/new",
-        },
-      ],
     },
     {
       title: "Projects",
@@ -65,16 +54,6 @@ const data = {
       icon: (
         <FolderKanbanIcon />
       ),
-      items: [
-        {
-          title: "All Projects",
-          url: "/projects",
-        },
-        {
-          title: "Add Project",
-          url: "/projects/new",
-        },
-      ],
     },
     {
       title: "Payments",
@@ -82,16 +61,6 @@ const data = {
       icon: (
         <HandCoinsIcon />
       ),
-      items: [
-        {
-          title: "All Payments",
-          url: "/payments",
-        },
-        {
-          title: "Add Payment",
-          url: "/payments/new",
-        },
-      ],
     },
     {
       title: "Tasks",
@@ -99,16 +68,6 @@ const data = {
       icon: (
         <CheckSquareIcon />
       ),
-      items: [
-        {
-          title: "All Tasks",
-          url: "/tasks",
-        },
-        {
-          title: "Add Tasks",
-          url: "/tasks/new",
-        },
-      ],
     },
     {
       title: "Reports",

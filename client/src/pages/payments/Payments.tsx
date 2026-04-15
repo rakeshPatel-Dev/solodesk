@@ -1,11 +1,52 @@
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import PageStatCard from '@/components/shared/PageStatCard'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { mockInvoices } from '@/data/mockData'
-import { MoreVertical, ArrowRight } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CheckCircle2, CircleDollarSign, Clock3, MoreVertical } from 'lucide-react'
 
 const Payments = () => {
+  const toAmount = (value: string) => Number(value.replace(/[^\d.]/g, ''))
+
+  const paidInvoices = mockInvoices.filter((invoice) => invoice.status === 'Paid').length
+  const pendingInvoices = mockInvoices.filter((invoice) => invoice.status === 'Pending').length
+  const overdueInvoices = mockInvoices.filter((invoice) => invoice.status === 'Overdue')
+
+  const totalInvoicedAmount = mockInvoices.reduce((sum, invoice) => sum + toAmount(invoice.amount), 0)
+  const overdueAmount = overdueInvoices.reduce((sum, invoice) => sum + toAmount(invoice.amount), 0)
+
+  const paymentStats = [
+    {
+      title: 'Total Invoiced',
+      value: `$${totalInvoicedAmount.toLocaleString()}`,
+      subtitle: 'Combined value across all invoices',
+      icon: CircleDollarSign,
+      tone: 'indigo' as const,
+    },
+    {
+      title: 'Paid Invoices',
+      value: paidInvoices,
+      subtitle: 'Successfully settled invoices',
+      icon: CheckCircle2,
+      tone: 'emerald' as const,
+    },
+    {
+      title: 'Pending Invoices',
+      value: pendingInvoices,
+      subtitle: 'Awaiting confirmation from clients',
+      icon: Clock3,
+      tone: 'amber' as const,
+    },
+    {
+      title: 'Overdue Amount',
+      value: `$${overdueAmount.toLocaleString()}`,
+      subtitle: `${overdueInvoices.length} invoice(s) need follow-up`,
+      icon: AlertTriangle,
+      tone: 'rose' as const,
+    },
+  ]
+
   return (
     <div className="mx-auto w-full max-w-7xl px-4 lg:px-8 py-8 space-y-12">
       <header className="flex items-center justify-between">
@@ -18,6 +59,12 @@ const Payments = () => {
           <Button className="font-heading font-bold tracking-tight">Create Invoice</Button>
         </div>
       </header>
+
+      <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        {paymentStats.map((stat) => (
+          <PageStatCard key={stat.title} stat={stat} />
+        ))}
+      </section>
 
       <section>
         <Card className="bg-card rounded-xl border-none editorial-shadow overflow-hidden">
@@ -50,16 +97,14 @@ const Payments = () => {
                   <TableCell className="py-6 text-sm text-muted-foreground">{invoice.date}</TableCell>
                   <TableCell className="py-6">
                     <div className="flex justify-center">
-                      <Badge variant="outline" className={`border-none rounded-full px-3 py-1 text-[10px] uppercase tracking-wider font-bold gap-2 ${
-                        invoice.status === 'Paid' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' :
+                      <Badge variant="outline" className={`border-none rounded-full px-3 py-1 text-[10px] uppercase tracking-wider font-bold gap-2 ${invoice.status === 'Paid' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' :
                         invoice.status === 'Pending' ? 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400' :
-                        'bg-destructive/10 text-destructive'
-                      }`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${
-                          invoice.status === 'Paid' ? 'bg-emerald-500' :
+                          'bg-destructive/10 text-destructive'
+                        }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${invoice.status === 'Paid' ? 'bg-emerald-500' :
                           invoice.status === 'Pending' ? 'bg-yellow-500' :
-                          'bg-destructive'
-                        }`}></span>
+                            'bg-destructive'
+                          }`}></span>
                         {invoice.status}
                       </Badge>
                     </div>
@@ -78,7 +123,7 @@ const Payments = () => {
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-12 pt-12">
         <div className="relative rounded-2xl overflow-hidden aspect-video editorial-shadow bg-secondary flex items-end p-8">
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent z-10" />
+          <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent z-10" />
           <div className="relative z-20">
             <h4 className="text-white font-heading text-xl font-bold">Payment Insights</h4>
             <p className="text-white/80 text-sm mt-2">See how your revenue has grown over the last fiscal quarter with our new deep-dive analytics tool.</p>
