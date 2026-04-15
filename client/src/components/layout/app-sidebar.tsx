@@ -18,8 +18,6 @@ import {
   HouseIcon,
   UsersIcon,
   FolderKanbanIcon,
-  HandCoinsIcon,
-  CheckSquareIcon,
   BarChart3Icon,
   SettingsIcon,
 } from "lucide-react"
@@ -53,20 +51,6 @@ const data = {
       url: "/projects",
       icon: (
         <FolderKanbanIcon />
-      ),
-    },
-    {
-      title: "Payments",
-      url: "/payments",
-      icon: (
-        <HandCoinsIcon />
-      ),
-    },
-    {
-      title: "Tasks",
-      url: "/tasks",
-      icon: (
-        <CheckSquareIcon />
       ),
     },
     {

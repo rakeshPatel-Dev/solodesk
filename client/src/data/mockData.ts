@@ -21,10 +21,55 @@ export const mockInvoices = [
 // ];
 
 export const mockProjects = [
-  { id: '1', name: 'Brand Identity Refresh', client: 'Aether Labs', status: 'In Progress', progress: 65, dueDate: 'Dec 15, 2023' },
-  { id: '2', name: 'UI/UX Audit', client: 'Neo-Humanity', status: 'Review', progress: 90, dueDate: 'Nov 20, 2023' },
-  { id: '3', name: 'Web Development', client: 'Studio T', status: 'Completed', progress: 100, dueDate: 'Sep 10, 2023' },
+  {
+    id: 'PRJ-001',
+    name: 'Brand Identity Refresh',
+    description: 'Rework complete identity system and social templates.',
+    clientId: { _id: 'CLT-001', name: 'Acme Corporation' },
+    type: 'Branding',
+    budget: 12500,
+    status: 'In Progress',
+    startDate: '2026-03-10',
+    deadline: '2026-05-20',
+  },
+  {
+    id: 'PRJ-002',
+    name: 'UX Audit Sprint',
+    description: 'Audit current experience and deliver prioritized UX roadmap.',
+    clientId: { _id: 'CLT-002', name: 'Stellar Studios' },
+    type: 'Consulting',
+    budget: 8200,
+    status: 'Lead',
+    startDate: '2026-04-18',
+    deadline: '2026-06-02',
+  },
+  {
+    id: 'PRJ-003',
+    name: 'Marketing Website Build',
+    description: 'Design and ship a conversion-focused marketing website.',
+    clientId: { _id: 'CLT-003', name: 'Nexus Industries' },
+    type: 'Web Development',
+    budget: 23100,
+    status: 'Completed',
+    startDate: '2026-01-12',
+    deadline: '2026-03-29',
+  },
 ];
+
+export const mockProjectPaymentUpdates: Record<
+  string,
+  { amount: number; date: string }[]
+> = {
+  'PRJ-001': [
+    { amount: 10000, date: '2026-04-10' },
+    { amount: 5000, date: '2026-04-15' },
+  ],
+  'PRJ-002': [{ amount: 2000, date: '2026-04-20' }],
+  'PRJ-003': [
+    { amount: 12000, date: '2026-02-05' },
+    { amount: 11100, date: '2026-03-21' },
+  ],
+}
 
 export const mockTasks = [
   { id: '1', title: 'Design home page wireframes', project: 'Brand Identity Refresh', priority: 'High', status: 'In Progress' },

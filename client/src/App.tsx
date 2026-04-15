@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import Settings from './pages/Settings'
 import Clients from './pages/clients/Clients'
 import Projects from './pages/projects/Projects'
+import ProjectDetail from './pages/projects/ProjectDetail'
 import Payments from './pages/payments/Payments'
 import AddClient from './pages/clients/AddClient'
 import AddProject from './pages/projects/AddProject'
@@ -47,6 +48,7 @@ const App = () => {
             <Route path="/projects" >
               <Route index element={<Projects />} />
               <Route path='new' element={<AddProject />} />
+              <Route path=':id' element={<ProjectDetail />} />
             </Route>
             <Route path="/payments">
               <Route index element={<Payments />} />
