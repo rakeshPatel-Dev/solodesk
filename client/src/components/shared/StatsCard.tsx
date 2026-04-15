@@ -1,10 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import type { LucideIcon } from 'lucide-react'
 
 interface StatsCardProps {
   stat: {
     title: string;
-    value: number;
-    icon: React.ComponentType<{ size?: number }>;
+    value: string | number;
+    icon: LucideIcon;
     subTitle: string;
     trend: string;
     trendDirection?: 'up' | 'down' | 'neutral';
@@ -13,6 +14,7 @@ interface StatsCardProps {
 
 const StatsCard = ({ stat }: StatsCardProps) => {
   const IconComponent = stat.icon
+
   return (
     <Card
       data-testid="stats-card"

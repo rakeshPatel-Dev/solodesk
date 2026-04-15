@@ -1,4 +1,3 @@
-import React from 'react'
 import { AppSidebar } from './components/layout/app-sidebar'
 import { SidebarInset, SidebarTrigger } from './components/ui/sidebar'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
