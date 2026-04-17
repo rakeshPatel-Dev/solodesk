@@ -1,6 +1,7 @@
 import { AppSidebar } from './components/layout/app-sidebar'
 import { SidebarInset, SidebarTrigger } from './components/ui/sidebar'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import Dashboard from './pages/Dashboard'
 import Settings from './pages/Settings'
 import Clients from './pages/clients/Clients'
@@ -15,9 +16,37 @@ import AddTask from './pages/tasks/AddTask'
 import Reports from './pages/Reports'
 import Footer from './components/layout/Footer'
 import Date from './components/shared/Date'
+import LoginPage from './pages/auth/login'
+import SignupPage from './pages/auth/Signup'
 
 const App = () => {
   const location = useLocation()
+  const isAuthRoute = location.pathname.startsWith('/auth')
+
+  if (isAuthRoute) {
+    return (
+      <div className="flex min-h-svh w-full">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={location.pathname}
+            className="w-full"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.28, ease: 'easeOut' }}
+          >
+            <Routes location={location}>
+              <Route path="/auth" element={<Navigate to="/auth/signup" replace />} />
+              <Route path="/auth/login" element={<LoginPage />} />
+              <Route path="/auth/signup" element={<SignupPage />} />
+              <Route path="*" element={<Navigate to="/auth/signup" replace />} />
+            </Routes>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    )
+  }
+
   const pageTitle = location.pathname === '/'
     ? 'Dashboard'
     : (() => {
@@ -60,6 +89,9 @@ const App = () => {
             </Route>
             <Route path="/settings" element={<Settings />} />
             <Route path="/reports" element={<Reports />} />
+            <Route path="/auth" element={<Navigate to="/auth/signup" replace />} />
+            <Route path="/auth/login" element={<LoginPage />} />
+            <Route path="/auth/signup" element={<SignupPage />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
           <Footer />
