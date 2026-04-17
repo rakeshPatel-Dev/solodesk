@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useDispatch, useSelector } from "react-redux"
+import { useNavigate } from "react-router-dom"
 
 import { NavMain } from "@/components/sidebar/nav-main"
 import { NavUser } from "@/components/sidebar/nav-user"
@@ -23,14 +25,12 @@ import {
 } from "lucide-react"
 import { Separator } from "../ui/separator"
 import { Link } from "react-router-dom"
+import { logout as clearAuth } from "@/store/features/authSlice"
+import { logout as logoutRequest } from "@/api/auth/login"
+import type { RootState } from "@/store/store"
 
 // This is sample data.
 const data = {
-  user: {
-    name: "Rikesh Patel",
-    email: "rikesh@example.com",
-    avatar: "https://i.pravatar.cc/100?img=12",
-  },
   navMain: [
     {
       title: "Dashboard",
@@ -64,6 +64,19 @@ const data = {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const dispatch = useDispatch()
+  const navigate = useNavigate()
+  const user = useSelector((state: RootState) => state.auth.user)
+
+  const handleLogout = async () => {
+    try {
+      await logoutRequest()
+    } finally {
+      dispatch(clearAuth())
+      navigate("/auth/login", { replace: true })
+    }
+  }
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
@@ -103,7 +116,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
         </SidebarMenu>
         <Separator />
-        <NavUser user={data.user} />
+        <NavUser
+          user={
+            user ?? {
+              name: "Guest user",
+              email: "guest@solodesk.app",
+              avatar: null,
+            }
+          }
+          onLogout={handleLogout}
+        />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

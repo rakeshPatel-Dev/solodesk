@@ -2,6 +2,8 @@ import { AppSidebar } from './components/layout/app-sidebar'
 import { SidebarInset, SidebarTrigger } from './components/ui/sidebar'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useEffect, useState } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
 import Dashboard from './pages/Dashboard'
 import Settings from './pages/Settings'
 import Clients from './pages/clients/Clients'
@@ -18,10 +20,51 @@ import Footer from './components/layout/Footer'
 import Date from './components/shared/Date'
 import LoginPage from './pages/auth/login'
 import SignupPage from './pages/auth/Signup'
+import { getMe } from './api/auth/login'
+import { login as setAuth, logout as clearAuth } from './store/features/authSlice'
+import { clearAuthStorage, writeAuthStorage } from './store/authStorage'
+import type { RootState } from './store/store'
+import { Loader2Icon } from 'lucide-react'
 
 const App = () => {
   const location = useLocation()
+  const dispatch = useDispatch()
+  const isAuthenticated = useSelector((state: RootState) => state.auth.isAuthenticated)
   const isAuthRoute = location.pathname.startsWith('/auth')
+  const [authChecked, setAuthChecked] = useState(false)
+
+  useEffect(() => {
+    const validateSession = async () => {
+      try {
+        const response = await getMe()
+        if (response?.user) {
+          dispatch(setAuth({ user: response.user }))
+          writeAuthStorage({ user: response.user })
+        } else {
+          clearAuthStorage()
+          dispatch(clearAuth())
+        }
+      } catch {
+        clearAuthStorage()
+        dispatch(clearAuth())
+      } finally {
+        setAuthChecked(true)
+      }
+    }
+
+    void validateSession()
+  }, [dispatch])
+
+  if (!authChecked) {
+    return (
+      <div className="flex min-h-svh w-full items-center justify-center bg-background text-muted-foreground">
+        <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-card/80 px-5 py-4 shadow-lg backdrop-blur-sm">
+          <Loader2Icon className="size-5 animate-spin text-primary" />
+          <span className="text-sm font-medium">Checking your session...</span>
+        </div>
+      </div>
+    )
+  }
 
   if (isAuthRoute) {
     return (
@@ -36,15 +79,19 @@ const App = () => {
             transition={{ duration: 0.28, ease: 'easeOut' }}
           >
             <Routes location={location}>
-              <Route path="/auth" element={<Navigate to="/auth/signup" replace />} />
-              <Route path="/auth/login" element={<LoginPage />} />
-              <Route path="/auth/signup" element={<SignupPage />} />
-              <Route path="*" element={<Navigate to="/auth/signup" replace />} />
+              <Route path="/auth" element={<Navigate to="/auth/login" replace />} />
+              <Route path="/auth/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
+              <Route path="/auth/signup" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <SignupPage />} />
+              <Route path="*" element={<Navigate to="/auth/login" replace />} />
             </Routes>
           </motion.div>
         </AnimatePresence>
       </div>
     )
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/auth/login" replace />
   }
 
   const pageTitle = location.pathname === '/'
@@ -89,9 +136,9 @@ const App = () => {
             </Route>
             <Route path="/settings" element={<Settings />} />
             <Route path="/reports" element={<Reports />} />
-            <Route path="/auth" element={<Navigate to="/auth/signup" replace />} />
-            <Route path="/auth/login" element={<LoginPage />} />
-            <Route path="/auth/signup" element={<SignupPage />} />
+            <Route path="/auth" element={<Navigate to="/auth/login" replace />} />
+            <Route path="/auth/login" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/auth/signup" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
           <Footer />
