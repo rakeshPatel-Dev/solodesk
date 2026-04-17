@@ -119,7 +119,6 @@ export function AuthForm({ mode = "signup", className, ...props }: AuthFormProps
       dispatch(setAuth({ user: response.user }))
       writeAuthStorage({ user: response.user })
       toast.success(isSignup ? "Account created successfully." : "Signed in successfully.")
-      navigate("/dashboard", { replace: true })
     } catch (error) {
       const message = getErrorMessage(error)
       setErrorMessage(message)
@@ -186,6 +185,7 @@ export function AuthForm({ mode = "signup", className, ...props }: AuthFormProps
                 <InputGroup>
                   <InputGroupInput
                     id="password"
+                    required
                     type={showPassword ? "text" : "password"}
                     placeholder="Enter your password"
                     autoComplete={isSignup ? "new-password" : "current-password"}
@@ -214,6 +214,7 @@ export function AuthForm({ mode = "signup", className, ...props }: AuthFormProps
                       id="confirm-password"
                       type={showConfirmPassword ? "text" : "password"}
                       placeholder="Re-enter your password"
+                      required
                       autoComplete="new-password"
                       value={confirmPassword}
                       onChange={(event) => setConfirmPassword(event.target.value)}

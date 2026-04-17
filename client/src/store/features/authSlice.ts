@@ -1,5 +1,5 @@
 
-import { createSlice, type PayloadAction } from "@reduxjs/toolkit"
+import { createAsyncThunk, createSlice, type PayloadAction } from "@reduxjs/toolkit"
 import { clearAuthStorage, readAuthStorage, type AuthUser } from "@/store/authStorage"
 
 type AuthState = {
@@ -14,6 +14,15 @@ const initialState: AuthState = {
   isAuthenticated: Boolean(storedAuth?.user),
 }
 
+
+export const logoutAndClearStorage = createAsyncThunk(
+  "auth/logoutAndClearStorage",
+  async (_, { dispatch }) => {
+    clearAuthStorage()
+    dispatch(logout())
+  }
+)
+
 const authSlice = createSlice({
   name: "auth",
   initialState,
@@ -25,7 +34,6 @@ const authSlice = createSlice({
     logout: (state) => {
       state.user = null;
       state.isAuthenticated = false;
-      clearAuthStorage()
     },
   },
 });
