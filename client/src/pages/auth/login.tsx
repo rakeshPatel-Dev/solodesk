@@ -3,9 +3,6 @@ import { GeometricBackground } from "@/components/ui/shape-landing-hero"
 
 export default function LoginPage() {
 
-
-
-
   return (
     <div className="relative  w-full min-h-svh overflow-hidden">
       <GeometricBackground />

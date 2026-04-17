@@ -19,6 +19,7 @@ import { login as loginRequest, register as registerRequest } from "@/api/auth/l
 import { login as setAuth } from "@/store/features/authSlice"
 import { clearAuthStorage, writeAuthStorage } from "@/store/authStorage"
 import type { RootState } from "@/store/store"
+import { getAuthPasswordRequirements, validateAuthFormData } from "@/lib/validators/auth"
 
 type AuthMode = "login" | "signup"
 
@@ -64,9 +65,6 @@ export function AuthForm({ mode = "signup", className, ...props }: AuthFormProps
     return "Unable to complete authentication."
   }
 
-  const getPasswordRequirements = () =>
-    "Must be at least 8 characters and include uppercase, lowercase, and a number."
-
   useEffect(() => {
     if (isAuthenticated) {
       navigate("/dashboard", { replace: true })
@@ -75,39 +73,20 @@ export function AuthForm({ mode = "signup", className, ...props }: AuthFormProps
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const validation = validateAuthFormData({
+      mode: isSignup ? "signup" : "login",
+      fullName,
+      email,
+      password,
+      confirmPassword,
+    })
+
+    if (!validation.valid) {
+      setErrorMessage(validation.message)
+      return
+    }
+
     setErrorMessage("")
-
-    if (!email.trim()) {
-      setErrorMessage("Email is required.")
-      return
-    }
-
-    if (!password) {
-      setErrorMessage("Password is required.")
-      return
-    }
-
-    if (isSignup && !fullName.trim()) {
-      setErrorMessage("Full name is required.")
-      return
-    }
-
-    if (isSignup && password !== confirmPassword) {
-      setErrorMessage("Passwords do not match.")
-      return
-    }
-
-    if (isSignup) {
-      const hasMinLength = password.length >= 8
-      const hasUppercase = /[A-Z]/.test(password)
-      const hasLowercase = /[a-z]/.test(password)
-      const hasNumber = /[0-9]/.test(password)
-
-      if (!hasMinLength || !hasUppercase || !hasLowercase || !hasNumber) {
-        setErrorMessage(getPasswordRequirements())
-        return
-      }
-    }
 
     setIsSubmitting(true)
 
@@ -202,7 +181,7 @@ export function AuthForm({ mode = "signup", className, ...props }: AuthFormProps
                   </InputGroupButton>
                 </InputGroup>
                 <FieldDescription>
-                  {isSignup ? getPasswordRequirements() : "Use the password tied to your account."}
+                  {isSignup ? getAuthPasswordRequirements() : "Use the password tied to your account."}
                 </FieldDescription>
               </Field>
 
