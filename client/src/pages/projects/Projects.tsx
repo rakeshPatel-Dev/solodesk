@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import PageStatCard from '@/components/shared/PageStatCard'
 import ProjectForm from '@/components/forms/ProjectForm'
+import { TableEmptyState } from '@/components/shared/TableEmptyState'
 import {
   Dialog,
   DialogContent,
@@ -51,6 +52,8 @@ import {
   MoreVertical,
   Trash2,
   Wallet,
+  Filter,
+  FolderOpen,
 } from 'lucide-react'
 
 type Project = {
@@ -375,15 +378,27 @@ const Projects = () => {
       </section>
 
       {filteredProjects.length === 0 ? (
-        <Card className="border border-dashed border-border/70 bg-card p-10 text-center">
-          <h2 className="text-xl font-heading font-bold text-foreground">No projects yet</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Create your first project to start tracking budget and payments.</p>
-          <div className="mt-5">
-            <Button onClick={() => setIsAddProjectOpen(true)}>
-              Add Project
-            </Button>
-          </div>
-        </Card>
+        <TableEmptyState
+          icon={searchTerm || statusFilter !== 'all' ? Filter : FolderOpen}
+          title={searchTerm || statusFilter !== 'all' ? 'No projects found' : 'No projects yet'}
+          description={
+            searchTerm || statusFilter !== 'all'
+              ? `We couldn't find any projects matching your search or filter. Try adjusting your search terms or clear the filters.`
+              : 'Start by creating your first project to track budget and payments.'
+          }
+          action={{
+            label: searchTerm || statusFilter !== 'all' ? 'Clear Filters' : 'Create First Project',
+            onClick: () => {
+              if (searchTerm || statusFilter !== 'all') {
+                setSearchTerm('')
+                setStatusFilter('all')
+              } else {
+                setIsAddProjectOpen(true)
+              }
+            },
+          }}
+          isFiltered={searchTerm !== '' || statusFilter !== 'all'}
+        />
       ) : isLoading ? (
         <Card className="overflow-hidden border border-border/70 bg-card p-8">
           <div className="flex items-center justify-center py-12">

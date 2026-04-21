@@ -1,5 +1,8 @@
+import { useEffect } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { toast } from "sonner"
+import { motion, AnimatePresence } from "framer-motion"
+import { Building2, Mail, Phone, MapPin, FileText, BadgeCheck, Loader2 } from "lucide-react"
 
 import axiosInstance from "@/lib/axios"
 import { cn } from "@/lib/utils"
@@ -21,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { Badge } from "@/components/ui/badge"
 
 type ClientStatus = "Active" | "Inactive"
 
@@ -36,10 +40,16 @@ type ClientFormValues = {
 type ClientFormProps = React.ComponentProps<"div"> & {
   onSubmit?: (values: ClientFormValues) => Promise<void> | void
   onSuccess?: () => void
+  onCancel?: () => void
   submitLabel?: string
+  cancelLabel?: string
+  initialValues?: Partial<ClientFormValues>
+  clientId?: string
+  showCancel?: boolean
+  compact?: boolean
 }
 
-const initialValues: ClientFormValues = {
+const defaultInitialValues: ClientFormValues = {
   name: "",
   email: "",
   phone: "",
@@ -48,32 +58,61 @@ const initialValues: ClientFormValues = {
   status: "Active",
 }
 
-function getErrorMessage(error: unknown) {
-  if (typeof error === "object" && error !== null && "response" in error) {
-    const response = (error as { response?: { data?: { message?: string } } }).response
-    if (response?.data?.message) {
-      return response.data.message
-    }
-  }
-
-  if (error instanceof Error && error.message) {
-    return error.message
-  }
-
-  return "Unable to create client."
+const statusConfig = {
+  Active: { label: "Active", variant: "success" as const, icon: BadgeCheck },
+  Inactive: { label: "Inactive", variant: "secondary" as const, icon: null },
 }
 
-function ClientForm({ className, onSubmit, onSuccess, submitLabel = "Add Client", ...props }: ClientFormProps) {
+function getErrorMessage(error: unknown): string {
+  if (typeof error === "object" && error !== null) {
+    if ("response" in error) {
+      const response = (error as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } }).response
+      if (response?.data?.message) return response.data.message
+      if (response?.data?.errors) {
+        const firstError = Object.values(response.data.errors)[0]
+        if (firstError && firstError[0]) return firstError[0]
+      }
+    }
+    if (error instanceof Error && error.message) return error.message
+  }
+  return "Unable to process request. Please try again."
+}
+
+function ClientForm({
+  className,
+  onSubmit,
+  onSuccess,
+  onCancel,
+  submitLabel = "Add Client",
+  cancelLabel = "Cancel",
+  initialValues,
+  clientId,
+  showCancel = false,
+  compact = false,
+  ...props
+}: ClientFormProps) {
+  const isEditMode = !!clientId
+
   const {
     register,
     control,
     handleSubmit,
     reset,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty, isValid },
+    watch,
   } = useForm<ClientFormValues>({
-    defaultValues: initialValues,
-    mode: "onBlur",
+    defaultValues: { ...defaultInitialValues, ...initialValues },
+    mode: "onChange",
   })
+
+  const watchedStatus = watch("status")
+
+  // Reset form when initialValues change (e.g., editing different client)
+  useEffect(() => {
+    if (initialValues) {
+      reset({ ...defaultInitialValues, ...initialValues })
+    }
+  }, [initialValues, reset])
 
   const submitForm = async (values: ClientFormValues) => {
     const normalizedValues: ClientFormValues = {
@@ -85,126 +124,287 @@ function ClientForm({ className, onSubmit, onSuccess, submitLabel = "Add Client"
       notes: values.notes.trim(),
     }
 
+    const loadingToast = toast.loading(
+      isEditMode ? "Updating client..." : "Creating client..."
+    )
+
     try {
       if (onSubmit) {
         await onSubmit(normalizedValues)
+      } else if (isEditMode && clientId) {
+        await axiosInstance.put(`/clients/${clientId}`, normalizedValues)
       } else {
         await axiosInstance.post("/clients", normalizedValues)
       }
 
-      toast.success("Client created successfully.")
-      reset(initialValues)
+      toast.dismiss(loadingToast)
+      toast.success(isEditMode ? "Client updated successfully" : "Client created successfully", {
+        icon: "🎉",
+        duration: 4000,
+      })
+
+      if (!isEditMode) {
+        reset(defaultInitialValues)
+      }
       onSuccess?.()
     } catch (error) {
-      toast.error(getErrorMessage(error))
+      toast.dismiss(loadingToast)
+      toast.error(getErrorMessage(error), {
+        duration: 5000,
+      })
     }
   }
 
+  const handleCancel = () => {
+    reset({ ...defaultInitialValues, ...initialValues })
+    onCancel?.()
+  }
+
   return (
-    <div className={cn("w-full", className)} {...props}>
-      <Card className="border-border/60">
-        <CardHeader>
-          <CardTitle>Add Client</CardTitle>
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className={cn("w-full p-8", className)}
+      {...props}
+    >
+      <Card className={cn(
+        "border-border/60 shadow-sm hover:shadow-md transition-all duration-200",
+        compact && "shadow-none"
+      )}>
+        <CardHeader className={cn(compact && "pb-3")}>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <Building2 className="h-5 w-5 text-primary" />
+              {isEditMode ? "Edit Client" : "New Client"}
+            </CardTitle>
+            {isEditMode && watchedStatus && (
+              <Badge variant={statusConfig[watchedStatus].variant}>
+                {statusConfig[watchedStatus].label}
+              </Badge>
+            )}
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className={cn(compact && "pt-0")}>
           <form className="space-y-5" onSubmit={handleSubmit(submitForm)}>
-            <FieldGroup>
+            <FieldGroup className={cn(compact && "gap-4")}>
+              {/* Name Field - Required */}
               <Field>
-                <FieldLabel htmlFor="client-name">Client Name</FieldLabel>
+                <FieldLabel htmlFor="client-name" className="flex items-center gap-2">
+                  <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  Client Name <span className="text-destructive">*</span>
+                </FieldLabel>
                 <Input
                   id="client-name"
-                  placeholder="Acme Corporation"
+                  placeholder="e.g., Acme Corporation"
                   aria-invalid={!!errors.name}
+                  disabled={isSubmitting}
+                  className="transition-all focus:ring-2 focus:ring-primary/20"
                   {...register("name", {
-                    required: "Client name is required.",
-                    validate: (value) => value.trim().length >= 2 || "Client name must be at least 2 characters.",
+                    required: "Client name is required",
+                    minLength: { value: 2, message: "Must be at least 2 characters" },
+                    maxLength: { value: 100, message: "Cannot exceed 100 characters" },
                   })}
                 />
-                <FieldError>{errors.name?.message}</FieldError>
+                <AnimatePresence mode="wait">
+                  {errors.name && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                    >
+                      <FieldError>{errors.name.message}</FieldError>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </Field>
 
+              {/* Email Field - Optional with validation */}
               <Field>
-                <FieldLabel htmlFor="client-email">Email</FieldLabel>
+                <FieldLabel htmlFor="client-email" className="flex items-center gap-2">
+                  <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                  Email Address
+                </FieldLabel>
                 <Input
                   id="client-email"
                   type="email"
                   placeholder="team@acme.com"
                   aria-invalid={!!errors.email}
+                  disabled={isSubmitting}
+                  className="transition-all"
                   {...register("email", {
-                    validate: (value) => {
-                      if (!value.trim()) return true
-                      return /^\S+@\S+\.\S+$/.test(value.trim()) || "Enter a valid email address."
+                    pattern: {
+                      value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                      message: "Please enter a valid email address",
                     },
                   })}
                 />
-                <FieldError>{errors.email?.message}</FieldError>
+                <FieldDescription>
+                  Used for invoices and communications
+                </FieldDescription>
+                <AnimatePresence mode="wait">
+                  {errors.email && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                    >
+                      <FieldError>{errors.email.message}</FieldError>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </Field>
 
+              {/* Phone Field */}
               <Field>
-                <FieldLabel htmlFor="client-phone">Phone</FieldLabel>
+                <FieldLabel htmlFor="client-phone" className="flex items-center gap-2">
+                  <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                  Phone Number
+                </FieldLabel>
                 <Input
                   id="client-phone"
-                  placeholder="+1 555 0101"
+                  type="tel"
+                  placeholder="+1 (555) 000-0000"
+                  disabled={isSubmitting}
                   {...register("phone")}
                 />
               </Field>
 
+              {/* Address Field */}
               <Field>
-                <FieldLabel htmlFor="client-address">Address</FieldLabel>
+                <FieldLabel htmlFor="client-address" className="flex items-center gap-2">
+                  <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                  Address
+                </FieldLabel>
                 <Input
                   id="client-address"
-                  placeholder="Street, city, country"
+                  placeholder="Street, city, postal code, country"
                   aria-invalid={!!errors.address}
+                  disabled={isSubmitting}
                   {...register("address", {
-                    validate: (value) => value.length <= 200 || "Address cannot exceed 200 characters.",
+                    maxLength: { value: 200, message: "Cannot exceed 200 characters" },
                   })}
                 />
-                <FieldError>{errors.address?.message}</FieldError>
+                <AnimatePresence mode="wait">
+                  {errors.address && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                    >
+                      <FieldError>{errors.address.message}</FieldError>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </Field>
 
+              {/* Status Field */}
               <Field>
                 <FieldLabel htmlFor="client-status">Status</FieldLabel>
                 <Controller
                   control={control}
                   name="status"
                   render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
+                    <Select value={field.value} onValueChange={field.onChange} disabled={isSubmitting}>
                       <SelectTrigger id="client-status" className="w-full">
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Active">Active</SelectItem>
-                        <SelectItem value="Inactive">Inactive</SelectItem>
+                        <SelectItem value="Active">
+                          <div className="flex items-center gap-2">
+                            <div className="h-2 w-2 rounded-full bg-green-500" />
+                            Active
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="Inactive">
+                          <div className="flex items-center gap-2">
+                            <div className="h-2 w-2 rounded-full bg-gray-400" />
+                            Inactive
+                          </div>
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   )}
                 />
               </Field>
 
+              {/* Notes Field */}
               <Field>
-                <FieldLabel htmlFor="client-notes">Notes</FieldLabel>
+                <FieldLabel htmlFor="client-notes" className="flex items-center gap-2">
+                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                  Notes
+                </FieldLabel>
                 <Textarea
                   id="client-notes"
-                  placeholder="Any additional details about this client"
+                  placeholder="Add any relevant information about this client..."
+                  rows={4}
                   aria-invalid={!!errors.notes}
+                  disabled={isSubmitting}
+                  className="resize-none"
                   {...register("notes", {
-                    validate: (value) => value.length <= 1000 || "Notes cannot exceed 1000 characters.",
+                    maxLength: { value: 500, message: "Cannot exceed 500 characters" },
                   })}
                 />
-                <FieldDescription>
-                  Keep notes concise and useful for your team.
+                <FieldDescription className="flex justify-between">
+                  <span>Internal notes for your team</span>
+                  {watch("notes")?.length > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {watch("notes").length}/500
+                    </span>
+                  )}
                 </FieldDescription>
-                <FieldError>{errors.notes?.message}</FieldError>
+                <AnimatePresence mode="wait">
+                  {errors.notes && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                    >
+                      <FieldError>{errors.notes.message}</FieldError>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </Field>
 
-              <Button type="submit" className="w-full sm:w-auto" disabled={isSubmitting}>
-                {isSubmitting ? "Saving..." : submitLabel}
-              </Button>
+              {/* Actions */}
+              <div className={cn(
+                "flex gap-3 pt-4",
+                compact ? "flex-col" : "flex-col sm:flex-row"
+              )}>
+                <Button
+                  type="submit"
+                  disabled={isSubmitting || (isEditMode ? !isDirty : !isValid)}
+                  className={cn(
+                    "relative transition-all",
+                    !compact && "sm:flex-1"
+                  )}
+                >
+                  {isSubmitting && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {isSubmitting
+                    ? (isEditMode ? "Updating..." : "Creating...")
+                    : submitLabel
+                  }
+                </Button>
+
+                {(showCancel || onCancel) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCancel}
+                    disabled={isSubmitting}
+                    className={cn(!compact && "sm:flex-1")}
+                  >
+                    {cancelLabel}
+                  </Button>
+                )}
+              </div>
             </FieldGroup>
           </form>
         </CardContent>
       </Card>
-    </div>
+    </motion.div>
   )
 }
 

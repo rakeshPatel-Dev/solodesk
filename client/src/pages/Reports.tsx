@@ -9,6 +9,7 @@ import {
   YAxis,
 } from 'recharts'
 import { Card } from '@/components/ui/card'
+import { TableEmptyState } from '@/components/shared/TableEmptyState'
 import {
   Select,
   SelectContent,
@@ -26,6 +27,7 @@ import {
 } from '@/components/ui/table'
 import axiosInstance from '@/lib/axios'
 import { toast } from 'sonner'
+import { FolderOpen } from 'lucide-react'
 
 type Project = {
   _id: string
@@ -414,31 +416,39 @@ const Reports = () => {
           <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
             <h3 className="font-semibold text-foreground">Top Pending Projects</h3>
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead>Project</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead className="text-right">Due</TableHead>
-                <TableHead className="text-right">Days Left</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pendingProjects.slice(0, 6).map((project) => {
-                const isOverdue = (project.daysLeft ?? 0) < 0
-                return (
-                  <TableRow key={project._id}>
-                    <TableCell className="font-medium">{project.name}</TableCell>
-                    <TableCell>{getClientName(project)}</TableCell>
-                    <TableCell className="text-right font-semibold">{formatCurrency(project.due)}</TableCell>
-                    <TableCell className={`text-right font-medium ${isOverdue ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
-                      {project.daysLeft == null ? '-' : isOverdue ? `Overdue ${Math.abs(project.daysLeft)}d` : `${project.daysLeft}d`}
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+          {pendingProjects.length === 0 ? (
+            <TableEmptyState
+              icon={FolderOpen}
+              title="No pending projects"
+              description="All your projects are on track or completed. Great work!"
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Project</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead className="text-right">Due</TableHead>
+                  <TableHead className="text-right">Days Left</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pendingProjects.slice(0, 6).map((project) => {
+                  const isOverdue = (project.daysLeft ?? 0) < 0
+                  return (
+                    <TableRow key={project._id}>
+                      <TableCell className="font-medium">{project.name}</TableCell>
+                      <TableCell>{getClientName(project)}</TableCell>
+                      <TableCell className="text-right font-semibold">{formatCurrency(project.due)}</TableCell>
+                      <TableCell className={`text-right font-medium ${isOverdue ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+                        {project.daysLeft == null ? '-' : isOverdue ? `Overdue ${Math.abs(project.daysLeft)}d` : `${project.daysLeft}d`}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          )}
         </Card>
       </section>
 
@@ -449,44 +459,60 @@ const Reports = () => {
             <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
               <h3 className="font-semibold text-foreground">Top Clients by Revenue</h3>
             </div>
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>Client</TableHead>
-                  <TableHead className="text-right">Total Earned</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {topClients.map((client) => (
-                  <TableRow key={client._id}>
-                    <TableCell>{client.name}</TableCell>
-                    <TableCell className="text-right font-semibold">{formatCurrency(client.revenue)}</TableCell>
+            {topClients.length === 0 ? (
+              <TableEmptyState
+                icon={FolderOpen}
+                title="No client data"
+                description="Create projects and record payments to see top clients by revenue."
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Client</TableHead>
+                    <TableHead className="text-right">Total Earned</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {topClients.map((client) => (
+                    <TableRow key={client._id}>
+                      <TableCell>{client.name}</TableCell>
+                      <TableCell className="text-right font-semibold">{formatCurrency(client.revenue)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </Card>
 
           <Card className="overflow-hidden border border-border/60">
             <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
               <h3 className="font-semibold text-foreground">Risk Clients</h3>
             </div>
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>Client</TableHead>
-                  <TableHead className="text-right">Due Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {riskClients.map((client) => (
-                  <TableRow key={client._id}>
-                    <TableCell>{client.name}</TableCell>
-                    <TableCell className="text-right font-semibold text-red-600 dark:text-red-400">{formatCurrency(client.due)}</TableCell>
+            {riskClients.length === 0 ? (
+              <TableEmptyState
+                icon={FolderOpen}
+                title="No risk clients"
+                description="All clients are current on their payments."
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Client</TableHead>
+                    <TableHead className="text-right">Due Amount</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {riskClients.map((client) => (
+                    <TableRow key={client._id}>
+                      <TableCell>{client.name}</TableCell>
+                      <TableCell className="text-right font-semibold text-red-600 dark:text-red-400">{formatCurrency(client.due)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </Card>
         </div>
 

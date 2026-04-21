@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import PageStatCard from '@/components/shared/PageStatCard'
 import ClientForm from '@/components/forms/ClientForm'
+import { TableEmptyState } from '@/components/shared/TableEmptyState'
 import {
   Table,
   TableBody,
@@ -25,6 +27,9 @@ import {
   UserX,
   Users,
   Trash2,
+  Building2,
+  FolderOpen,
+  Filter,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -65,25 +70,73 @@ const Clients = () => {
   const [clients, setClients] = useState<Client[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isAddClientOpen, setIsAddClientOpen] = useState(false)
+  const [isEditClientOpen, setIsEditClientOpen] = useState(false)
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'Active' | 'Inactive'>('all')
+
+  const fetchClients = async () => {
+    try {
+      setIsLoading(true)
+      const response = await axiosInstance.get('/clients', {
+        params: { page: 1, limit: 100, sortBy: 'name', sortOrder: 'asc' },
+      })
+      setClients(response.data.data ?? [])
+    } catch (error) {
+      toast.error('Failed to load clients')
+      console.error(error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const fetchClients = async () => {
-      try {
-        setIsLoading(true)
-        const response = await axiosInstance.get('/clients', {
-          params: { page: 1, limit: 100, sortBy: 'name', sortOrder: 'asc' },
-        })
-        setClients(response.data.data ?? [])
-      } catch (error) {
-        toast.error('Failed to load clients')
-        console.error(error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
     fetchClients()
   }, [])
+
+  const handleEditClient = (client: Client) => {
+    setSelectedClient(client)
+    setIsEditClientOpen(true)
+  }
+
+  const handleDeleteClient = async (clientId: string, clientName: string) => {
+    if (!confirm(`Are you sure you want to delete ${clientName}? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      await axiosInstance.delete(`/clients/${clientId}`)
+      toast.success('Client deleted successfully')
+      await fetchClients()
+    } catch (error) {
+      toast.error('Failed to delete client')
+      console.error(error)
+    }
+  }
+
+  const handleRefreshClients = async () => {
+    await fetchClients()
+  }
+
+  // Filter and search clients
+  const filteredClients = clients.filter((client) => {
+    // Filter by status
+    if (filterStatus !== 'all' && client.status !== filterStatus) {
+      return false
+    }
+
+    // Search by name, email, or phone
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      const matchesName = client.name.toLowerCase().includes(query)
+      const matchesEmail = client.email?.toLowerCase().includes(query)
+      const matchesPhone = client.phone?.toLowerCase().includes(query)
+
+      return matchesName || matchesEmail || matchesPhone
+    }
+
+    return true
+  })
 
   const activeClients = clients.filter((client) => client.status === 'Active').length
   const inactiveClients = clients.length - activeClients
@@ -137,10 +190,12 @@ const Clients = () => {
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
+            <Input
               type="text"
               placeholder="Search clients..."
-              className="h-10 w-full rounded-md border border-border bg-background pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
             />
           </div>
 
@@ -152,13 +207,19 @@ const Clients = () => {
                 className="border-border bg-background text-foreground hover:bg-muted/60"
               >
                 <ListFilter className="mr-2 h-4 w-4" />
-                Filter
+                Filter {filterStatus !== 'all' && `(${filterStatus})`}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
-              <DropdownMenuItem>All Clients</DropdownMenuItem>
-              <DropdownMenuItem>Active Clients</DropdownMenuItem>
-              <DropdownMenuItem>Inactive Clients</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterStatus('all')}>
+                All Clients
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterStatus('Active')}>
+                Active Clients
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterStatus('Inactive')}>
+                Inactive Clients
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -199,13 +260,36 @@ const Clients = () => {
               <p className="text-xs text-muted-foreground">Review client details, status, and lifetime value.</p>
             </div>
             <Badge variant="secondary" className="bg-sky-500/10 text-sky-700 dark:text-sky-300">
-              {clients.length} records
+              {filteredClients.length} of {clients.length} records
             </Badge>
           </div>
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <p className="text-muted-foreground">Loading clients...</p>
             </div>
+          ) : filteredClients.length === 0 ? (
+            <TableEmptyState
+              icon={searchQuery || filterStatus !== 'all' ? Filter : FolderOpen}
+              title={searchQuery || filterStatus !== 'all' ? 'No results found' : 'No clients yet'}
+
+              description={
+                searchQuery || filterStatus !== 'all'
+                  ? `We couldn't find any clients matching your search or filter. Try adjusting your search terms or clear the filters.`
+                  : 'Start by creating your first client to manage your client relationships.'
+              }
+              action={{
+                label: searchQuery || filterStatus !== 'all' ? 'Clear Filters' : 'Create First Client',
+                onClick: () => {
+                  if (searchQuery || filterStatus !== 'all') {
+                    setSearchQuery('')
+                    setFilterStatus('all')
+                  } else {
+                    setIsAddClientOpen(true)
+                  }
+                },
+              }}
+              isFiltered={searchQuery !== '' || filterStatus !== 'all'}
+            />
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -220,6 +304,9 @@ const Clients = () => {
                     <TableHead className="py-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       Status
                     </TableHead>
+                    <TableHead className="py-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Notes
+                    </TableHead>
                     <TableHead className="py-4 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       Total Spent
                     </TableHead>
@@ -227,7 +314,7 @@ const Clients = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {clients.map((client) => (
+                  {filteredClients.map((client) => (
                     <TableRow
                       key={client._id}
                       className="border-b border-border/50 transition-colors hover:bg-muted/40"
@@ -275,6 +362,15 @@ const Clients = () => {
                           {client.status}
                         </Badge>
                       </TableCell>
+                      <TableCell className="py-4">
+                        {client.notes ? (
+                          <div className="max-w-xs truncate text-sm text-muted-foreground" title={client.notes}>
+                            {client.notes}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground/50 italic">—</span>
+                        )}
+                      </TableCell>
                       <TableCell className="py-4 text-right font-mono text-sm font-semibold text-foreground">
                         $0
                       </TableCell>
@@ -293,11 +389,16 @@ const Clients = () => {
                           <DropdownMenuContent align="end" className="w-40">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleEditClient(client)}
+                            >
                               <Pencil className="h-4 w-4" />
                               Edit Client
                             </DropdownMenuItem>
-                            <DropdownMenuItem variant="destructive">
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() => handleDeleteClient(client._id, client.name)}
+                            >
                               <Trash2 className="h-4 w-4" />
                               Delete Client
                             </DropdownMenuItem>
@@ -314,28 +415,67 @@ const Clients = () => {
       </section>
 
       <Dialog open={isAddClientOpen} onOpenChange={setIsAddClientOpen}>
-        <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Add New Client</DialogTitle>
+        <DialogContent className="max-h-[90vh] overflow-x-hidden overflow-y-auto p-2 sm:max-w-xl">
+          <DialogHeader className="p-6 pb-0">
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Building2 className="h-5 w-5 text-primary" />
+              Add New Client
+            </DialogTitle>
             <DialogDescription>
-              Create a client and start assigning projects.
+              Create a client and start assigning projects. You can add more details later.
             </DialogDescription>
           </DialogHeader>
 
           <ClientForm
             submitLabel="Create Client"
+            showCancel={true}
+            cancelLabel="Cancel"
             onSuccess={async () => {
               setIsAddClientOpen(false)
-              try {
-                const response = await axiosInstance.get('/clients', {
-                  params: { page: 1, limit: 100, sortBy: 'name', sortOrder: 'asc' },
-                })
-                setClients(response.data.data ?? [])
-              } catch (error) {
-                console.error('Failed to refresh clients:', error)
-              }
+              await handleRefreshClients()
             }}
+            onCancel={() => setIsAddClientOpen(false)}
           />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditClientOpen} onOpenChange={setIsEditClientOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto p-2 sm:max-w-xl">
+          <DialogHeader className="p-6 pb-0">
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Pencil className="h-5 w-5 text-primary" />
+              Edit Client
+            </DialogTitle>
+            <DialogDescription>
+              Update client information and manage their details.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedClient && (
+            <ClientForm
+              clientId={selectedClient._id}
+              initialValues={{
+                name: selectedClient.name,
+                email: selectedClient.email ?? '',
+                phone: selectedClient.phone ?? '',
+                address: selectedClient.address ?? '',
+                notes: selectedClient.notes ?? '',
+                status: selectedClient.status ?? 'Active',
+              }}
+              submitLabel="Update Client"
+              showCancel={true}
+              cancelLabel="Cancel"
+              onSuccess={async () => {
+                setIsEditClientOpen(false)
+                setSelectedClient(null)
+                await handleRefreshClients()
+              }}
+              onCancel={() => {
+                setIsEditClientOpen(false)
+                setSelectedClient(null)
+              }}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>

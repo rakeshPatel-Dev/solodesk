@@ -3,10 +3,11 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import PageStatCard from '@/components/shared/PageStatCard'
+import { TableEmptyState } from '@/components/shared/TableEmptyState'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import axiosInstance from '@/lib/axios'
 import { toast } from 'sonner'
-import { AlertTriangle, ArrowRight, CheckCircle2, CircleDollarSign, Clock3, MoreVertical } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CheckCircle2, CircleDollarSign, Clock3, MoreVertical, FolderOpen } from 'lucide-react'
 
 type Invoice = {
   _id: string
@@ -112,6 +113,18 @@ const Payments = () => {
             <div className="flex items-center justify-center py-12">
               <p className="text-muted-foreground">Loading payments...</p>
             </div>
+          ) : invoices.length === 0 ? (
+            <TableEmptyState
+              icon={FolderOpen}
+              title="No invoices yet"
+              description="Create your first invoice to start managing client payments and track your revenue."
+              action={{
+                label: 'Create Invoice',
+                onClick: () => {
+                  // TODO: Handle create invoice action
+                },
+              }}
+            />
           ) : (
             <Table>
               <TableHeader className="bg-muted/50">
@@ -126,49 +139,41 @@ const Payments = () => {
                 </TableRow>
               </TableHeader>
               <TableBody className="divide-y divide-border/40">
-                {invoices.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                      No invoices found
+                {invoices.map((invoice) => (
+                  <TableRow key={invoice._id} className="hover:bg-muted/30 transition-colors group border-none">
+                    <TableCell className="py-6 font-medium text-sm">{invoice.id || invoice._id.substring(0, 8)}</TableCell>
+                    <TableCell className="py-6">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-[10px] font-bold">
+                          {invoice.clientIdentifier || '-'}
+                        </div>
+                        <span className="text-sm font-medium">{invoice.clientName || 'Unknown'}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-6 text-sm text-muted-foreground">{invoice.projectName || '-'}</TableCell>
+                    <TableCell className="py-6 text-sm font-bold">${typeof invoice.amount === 'number' ? invoice.amount.toLocaleString() : invoice.amount}</TableCell>
+                    <TableCell className="py-6 text-sm text-muted-foreground">{invoice.date || '-'}</TableCell>
+                    <TableCell className="py-6">
+                      <div className="flex justify-center">
+                        <Badge variant="outline" className={`border-none rounded-full px-3 py-1 text-[10px] uppercase tracking-wider font-bold gap-2 ${invoice.status === 'Paid' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' :
+                          invoice.status === 'Pending' ? 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400' :
+                            'bg-destructive/10 text-destructive'
+                          }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${invoice.status === 'Paid' ? 'bg-emerald-500' :
+                            invoice.status === 'Pending' ? 'bg-yellow-500' :
+                              'bg-destructive'
+                            }`}></span>
+                          {invoice.status || 'Pending'}
+                        </Badge>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-6 text-right">
+                      <Button variant="ghost" size="icon" className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                        <MoreVertical size={18} />
+                      </Button>
                     </TableCell>
                   </TableRow>
-                ) : (
-                  invoices.map((invoice) => (
-                    <TableRow key={invoice._id} className="hover:bg-muted/30 transition-colors group border-none">
-                      <TableCell className="py-6 font-medium text-sm">{invoice.id || invoice._id.substring(0, 8)}</TableCell>
-                      <TableCell className="py-6">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-[10px] font-bold">
-                            {invoice.clientIdentifier || '-'}
-                          </div>
-                          <span className="text-sm font-medium">{invoice.clientName || 'Unknown'}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-6 text-sm text-muted-foreground">{invoice.projectName || '-'}</TableCell>
-                      <TableCell className="py-6 text-sm font-bold">${typeof invoice.amount === 'number' ? invoice.amount.toLocaleString() : invoice.amount}</TableCell>
-                      <TableCell className="py-6 text-sm text-muted-foreground">{invoice.date || '-'}</TableCell>
-                      <TableCell className="py-6">
-                        <div className="flex justify-center">
-                          <Badge variant="outline" className={`border-none rounded-full px-3 py-1 text-[10px] uppercase tracking-wider font-bold gap-2 ${invoice.status === 'Paid' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' :
-                            invoice.status === 'Pending' ? 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400' :
-                              'bg-destructive/10 text-destructive'
-                            }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${invoice.status === 'Paid' ? 'bg-emerald-500' :
-                              invoice.status === 'Pending' ? 'bg-yellow-500' :
-                                'bg-destructive'
-                              }`}></span>
-                            {invoice.status || 'Pending'}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-6 text-right">
-                        <Button variant="ghost" size="icon" className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                          <MoreVertical size={18} />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
+                ))}
               </TableBody>
             </Table>
           )}
