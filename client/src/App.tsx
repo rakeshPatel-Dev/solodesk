@@ -10,8 +10,6 @@ import Clients from './pages/clients/Clients'
 import Projects from './pages/projects/Projects'
 import ProjectDetail from './pages/projects/ProjectDetail'
 import Payments from './pages/payments/Payments'
-import AddClient from './pages/clients/AddClient'
-import AddProject from './pages/projects/AddProject'
 import AddPayment from './pages/payments/AddPayment'
 import Tasks from './pages/tasks/Tasks'
 import AddTask from './pages/tasks/AddTask'
@@ -20,6 +18,8 @@ import Footer from './components/layout/Footer'
 import Date from './components/shared/Date'
 import LoginPage from './pages/auth/login'
 import SignupPage from './pages/auth/Signup'
+import Account from './pages/Account'
+import Notifications from './pages/Notifications.tsx'
 import { getMe } from './api/auth/login'
 import { login as setAuth, logout as clearAuth } from './store/features/authSlice'
 import { clearAuthStorage, writeAuthStorage } from './store/authStorage'
@@ -119,11 +119,11 @@ const App = () => {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/clients" >
               <Route index element={<Clients />} />
-              <Route path='new' element={<AddClient />} />
+              <Route path='new' element={<Navigate to="/clients" replace />} />
             </Route>
             <Route path="/projects" >
               <Route index element={<Projects />} />
-              <Route path='new' element={<AddProject />} />
+              <Route path='new' element={<Navigate to="/projects" replace />} />
               <Route path=':id' element={<ProjectDetail />} />
             </Route>
             <Route path="/payments">
@@ -135,6 +135,8 @@ const App = () => {
               <Route path="new" element={<AddTask />} />
             </Route>
             <Route path="/settings" element={<Settings />} />
+            <Route path="/account" element={<Account />} />
+            <Route path="/notifications" element={<Notifications />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/auth" element={<Navigate to="/auth/login" replace />} />
             <Route path="/auth/login" element={<Navigate to="/dashboard" replace />} />

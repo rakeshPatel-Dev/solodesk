@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Payment from "../models/payment.model.js";
+import PaymentTransaction from "../models/paymentTransaction.model.js";
 import Project from "../models/project.model.js";
 import {
   sendBadRequestError,
@@ -18,6 +19,13 @@ const toPositiveNumberOrNull = (value) => {
   if (value === undefined || value === null || value === "") return null;
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return parsed;
+};
+
+const toIsoDateOrNull = (value) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
   return parsed;
 };
 
@@ -622,5 +630,161 @@ export const getOverduePayments = async (req, res) => {
     });
   } catch (error) {
     return sendServerError(res, "Get overdue payments error", error, "Server error while fetching overdue payments");
+  }
+};
+
+// @desc    Get payment transaction history by project
+// @route   GET /api/payments/project/:projectId/transactions
+// @access  Private
+export const getPaymentTransactionsByProject = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+
+    if (!validateObjectIdOrRespond(res, projectId, "project ID")) return;
+
+    const projectExists = await Project.exists({
+      _id: projectId,
+      userId: req.user.id,
+    });
+
+    if (!projectExists) {
+      return sendNotFoundError(res, "Project not found or you don't have permission");
+    }
+
+    const transactions = await PaymentTransaction.find({
+      projectId,
+      userId: req.user.id,
+    })
+      .sort({ paidOn: -1, createdAt: -1 })
+      .select("amount paidOn note createdAt");
+
+    return res.status(200).json({
+      success: true,
+      data: transactions.map((item) => ({
+        _id: item._id,
+        amount: item.amount,
+        date: item.paidOn,
+        note: item.note,
+        createdAt: item.createdAt,
+      })),
+    });
+  } catch (error) {
+    return sendServerError(
+      res,
+      "Get payment transactions by project error",
+      error,
+      "Server error while fetching project payment transactions"
+    );
+  }
+};
+
+// @desc    Add payment transaction to project
+// @route   POST /api/payments/project/:projectId/transactions
+// @access  Private
+export const addPaymentTransaction = async (req, res) => {
+  const session = await mongoose.startSession();
+
+  try {
+    const { projectId } = req.params;
+    const { amount, date, note = "" } = req.body;
+
+    if (!validateObjectIdOrRespond(res, projectId, "project ID")) return;
+
+    const normalizedAmount = toPositiveNumberOrNull(amount);
+    if (normalizedAmount === null || normalizedAmount <= 0) {
+      return sendBadRequestError(res, "Amount must be a valid positive number");
+    }
+
+    const normalizedDate = toIsoDateOrNull(date);
+    if (date && !normalizedDate) {
+      return sendBadRequestError(res, "Date must be valid");
+    }
+
+    session.startTransaction();
+
+    const project = await Project.findOne({
+      _id: projectId,
+      userId: req.user.id,
+    }).session(session);
+
+    if (!project) {
+      await session.abortTransaction();
+      return sendNotFoundError(res, "Project not found or you don't have permission");
+    }
+
+    const transaction = await PaymentTransaction.create(
+      [
+        {
+          projectId,
+          userId: req.user.id,
+          amount: normalizedAmount,
+          paidOn: normalizedDate || new Date(),
+          note,
+        },
+      ],
+      { session }
+    );
+
+    let paymentRecord = await Payment.findOne({
+      projectId,
+      userId: req.user.id,
+    }).session(session);
+
+    if (!paymentRecord) {
+      const baseTotal = Math.max(project.budget || 0, normalizedAmount);
+      paymentRecord = await Payment.create(
+        [
+          {
+            projectId,
+            userId: req.user.id,
+            totalAmount: baseTotal,
+            paidAmount: normalizedAmount,
+          },
+        ],
+        { session }
+      );
+      paymentRecord = paymentRecord[0];
+    } else {
+      const nextPaidAmount = paymentRecord.paidAmount + normalizedAmount;
+      if (nextPaidAmount > paymentRecord.totalAmount) {
+        await session.abortTransaction();
+        return sendBadRequestError(
+          res,
+          "Payment amount exceeds remaining balance for this project"
+        );
+      }
+
+      paymentRecord.paidAmount = nextPaidAmount;
+      await paymentRecord.save({ session });
+    }
+
+    await session.commitTransaction();
+
+    const createdTx = transaction[0];
+
+    return res.status(201).json({
+      success: true,
+      message: "Payment transaction recorded successfully",
+      data: {
+        _id: createdTx._id,
+        amount: createdTx.amount,
+        date: createdTx.paidOn,
+        note: createdTx.note,
+        createdAt: createdTx.createdAt,
+      },
+    });
+  } catch (error) {
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+
+    return sendServerError(
+      res,
+      "Add payment transaction error",
+      error,
+      "Server error while recording payment transaction"
+    );
+  } finally {
+    await session.endSession();
   }
 };

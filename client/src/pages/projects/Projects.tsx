@@ -1,9 +1,10 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import PageStatCard from '@/components/shared/PageStatCard'
+import ProjectForm from '@/components/forms/ProjectForm'
 import {
   Dialog,
   DialogContent,
@@ -36,7 +37,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { mockProjectPaymentUpdates, mockProjects } from '@/data/mockData'
+import axiosInstance from '@/lib/axios'
+import { toast } from 'sonner'
 import {
   Check,
   CircleDollarSign,
@@ -51,7 +53,21 @@ import {
   Wallet,
 } from 'lucide-react'
 
-type Project = (typeof mockProjects)[number]
+type Project = {
+  _id: string
+  name: string
+  description?: string
+  clientId?: {
+    _id: string
+    name: string
+  }
+  type?: string
+  budget?: number
+  status?: 'Lead' | 'In Progress' | 'Completed'
+  startDate?: string
+  deadline?: string
+}
+
 type PaymentEntry = { amount: number; date: string; note?: string }
 
 const formatDate = (value?: string) => {
@@ -88,25 +104,46 @@ const moneyStatusClasses = {
 
 const Projects = () => {
   const navigate = useNavigate()
-  const [projects, setProjects] = useState<Project[]>(mockProjects)
-  const [paymentUpdates, setPaymentUpdates] = useState<Record<string, PaymentEntry[]>>(mockProjectPaymentUpdates)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [paymentUpdates, setPaymentUpdates] = useState<Record<string, PaymentEntry[]>>({})
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('all')
   const [sortBy, setSortBy] = useState<'latest' | 'highestDue'>('latest')
+  const [isAddProjectOpen, setIsAddProjectOpen] = useState(false)
 
   const [paymentProjectId, setPaymentProjectId] = useState<string | null>(null)
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentDate, setPaymentDate] = useState('')
   const [paymentNote, setPaymentNote] = useState('')
 
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        setIsLoading(true)
+        const response = await axiosInstance.get('/projects', {
+          params: { page: 1, limit: 100, sortBy: 'deadline', sortOrder: 'asc' },
+        })
+        setProjects(response.data.data ?? [])
+      } catch (error) {
+        toast.error('Failed to load projects')
+        console.error(error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchProjects()
+  }, [])
+
 
   const getPaidAmount = (projectId: string) =>
     (paymentUpdates[projectId] ?? []).reduce((sum, payment) => sum + payment.amount, 0)
 
-  const getDueAmount = (project: Project) => Math.max((project.budget ?? 0) - getPaidAmount(project.id), 0)
+  const getDueAmount = (project: Project) => Math.max((project.budget ?? 0) - getPaidAmount(project._id), 0)
 
   const getMoneyStatus = (project: Project) => {
-    const paid = getPaidAmount(project.id)
+    const paid = getPaidAmount(project._id)
     const budget = project.budget ?? 0
     const due = getDueAmount(project)
 
@@ -117,7 +154,7 @@ const Projects = () => {
 
 
   const totalBudget = projects.reduce((sum, project) => sum + (project.budget ?? 0), 0)
-  const totalPaid = projects.reduce((sum, project) => sum + getPaidAmount(project.id), 0)
+  const totalPaid = projects.reduce((sum, project) => sum + getPaidAmount(project._id), 0)
   const totalDue = projects.reduce((sum, project) => sum + getDueAmount(project), 0)
   const activeProjects = projects.filter(
     (project) => project.status === 'Lead' || project.status === 'In Progress'
@@ -196,7 +233,7 @@ const Projects = () => {
     const parsedAmount = Number(paymentAmount)
     if (!parsedAmount || parsedAmount <= 0 || !paymentDate) return
 
-    const currentProject = projects.find((project) => project.id === paymentProjectId)
+    const currentProject = projects.find((project) => project._id === paymentProjectId)
     if (!currentProject) return
 
     const currentPaid = getPaidAmount(paymentProjectId)
@@ -217,7 +254,7 @@ const Projects = () => {
 
     setProjects((prev) =>
       prev.map((project) =>
-        project.id === paymentProjectId
+        project._id === paymentProjectId
           ? {
             ...project,
             status: nextStatus,
@@ -232,21 +269,36 @@ const Projects = () => {
     setPaymentNote('')
   }
 
-  const handleMarkCompleted = (projectId: string) => {
-    setProjects((prev) =>
-      prev.map((project) =>
-        project.id === projectId
-          ? {
-            ...project,
-            status: 'Completed',
-          }
-          : project
+  const handleMarkCompleted = async (projectId: string) => {
+    try {
+      await axiosInstance.patch(`/projects/${projectId}`, { status: 'Completed' })
+      setProjects((prev) =>
+        prev.map((project) =>
+          project._id === projectId
+            ? {
+              ...project,
+              status: 'Completed',
+            }
+            : project
+        )
       )
-    )
+      toast.success('Project marked as completed')
+    } catch (error) {
+      toast.error('Failed to update project')
+      console.error(error)
+    }
   }
 
-  const handleDeleteProject = (projectId: string) => {
-    setProjects((prev) => prev.filter((project) => project.id !== projectId))
+  const handleDeleteProject = async (projectId: string) => {
+    if (!confirm('Are you sure you want to delete this project?')) return
+    try {
+      await axiosInstance.delete(`/projects/${projectId}`)
+      setProjects((prev) => prev.filter((project) => project._id !== projectId))
+      toast.success('Project deleted')
+    } catch (error) {
+      toast.error('Failed to delete project')
+      console.error(error)
+    }
   }
 
   const openProjectDetail = (projectId: string) => {
@@ -254,7 +306,7 @@ const Projects = () => {
   }
 
   const paymentProject = paymentProjectId
-    ? projects.find((project) => project.id === paymentProjectId)
+    ? projects.find((project) => project._id === paymentProjectId)
     : undefined
 
   return (
@@ -265,11 +317,9 @@ const Projects = () => {
           <p className="mt-2 text-sm text-muted-foreground">Manage budgets, dues, and payment flow in one place.</p>
         </div>
 
-        <Button asChild>
-          <Link to="/projects/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Project
-          </Link>
+        <Button onClick={() => setIsAddProjectOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Project
         </Button>
       </header>
 
@@ -329,9 +379,15 @@ const Projects = () => {
           <h2 className="text-xl font-heading font-bold text-foreground">No projects yet</h2>
           <p className="mt-2 text-sm text-muted-foreground">Create your first project to start tracking budget and payments.</p>
           <div className="mt-5">
-            <Button asChild>
-              <Link to="/projects/new">Add Project</Link>
+            <Button onClick={() => setIsAddProjectOpen(true)}>
+              Add Project
             </Button>
+          </div>
+        </Card>
+      ) : isLoading ? (
+        <Card className="overflow-hidden border border-border/70 bg-card p-8">
+          <div className="flex items-center justify-center py-12">
+            <p className="text-muted-foreground">Loading projects...</p>
           </div>
         </Card>
       ) : (
@@ -351,19 +407,19 @@ const Projects = () => {
             </TableHeader>
             <TableBody>
               {filteredProjects.map((project) => {
-                const paidAmount = getPaidAmount(project.id)
+                const paidAmount = getPaidAmount(project._id)
                 const dueAmount = getDueAmount(project)
                 const moneyStatus = getMoneyStatus(project)
 
                 return (
                   <TableRow
-                    key={project.id}
+                    key={project._id}
                     className="cursor-pointer"
-                    onClick={() => openProjectDetail(project.id)}
+                    onClick={() => openProjectDetail(project._id)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault()
-                        openProjectDetail(project.id)
+                        openProjectDetail(project._id)
                       }
                     }}
                     tabIndex={0}
@@ -418,19 +474,19 @@ const Projects = () => {
                         <DropdownMenuContent align="end" className="w-48">
                           <DropdownMenuLabel>Project Actions</DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onSelect={() => handleOpenPaymentModal(project.id)}>
+                          <DropdownMenuItem onSelect={() => handleOpenPaymentModal(project._id)}>
                             <Wallet className="h-4 w-4" />
                             Update Payment
                           </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => navigate(`/projects/${project.id}`)}>
+                          <DropdownMenuItem onSelect={() => navigate(`/projects/${project._id}`)}>
                             <Pencil className="h-4 w-4" />
                             Edit Project
                           </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => handleMarkCompleted(project.id)}>
+                          <DropdownMenuItem onSelect={() => handleMarkCompleted(project._id)}>
                             <Check className="h-4 w-4" />
                             Mark Completed
                           </DropdownMenuItem>
-                          <DropdownMenuItem variant="destructive" onSelect={() => handleDeleteProject(project.id)}>
+                          <DropdownMenuItem variant="destructive" onSelect={() => handleDeleteProject(project._id)}>
                             <Trash2 className="h-4 w-4" />
                             Delete
                           </DropdownMenuItem>
@@ -444,6 +500,35 @@ const Projects = () => {
           </Table>
         </Card>
       )}
+
+      <Dialog
+        open={isAddProjectOpen}
+        onOpenChange={setIsAddProjectOpen}
+      >
+        <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add New Project</DialogTitle>
+            <DialogDescription>
+              Create a project and track its budget, timeline, and payments.
+            </DialogDescription>
+          </DialogHeader>
+
+          <ProjectForm
+            submitLabel="Create Project"
+            onSuccess={async () => {
+              setIsAddProjectOpen(false)
+              try {
+                const response = await axiosInstance.get('/projects', {
+                  params: { page: 1, limit: 100, sortBy: 'deadline', sortOrder: 'asc' },
+                })
+                setProjects(response.data.data ?? [])
+              } catch (error) {
+                console.error('Failed to refresh projects:', error)
+              }
+            }}
+          />
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(paymentProjectId)}

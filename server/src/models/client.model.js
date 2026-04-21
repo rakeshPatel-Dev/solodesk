@@ -36,6 +36,7 @@ const clientSchema = new mongoose.Schema(
     notes: {
       type: String,
       maxlength: 1000,
+      trim: true,
     },
 
     status: {

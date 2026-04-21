@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import {
   Bar,
   BarChart,
@@ -8,7 +8,6 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import {
   Select,
@@ -25,7 +24,29 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { mockClients, mockProjectPaymentUpdates, mockProjects } from '@/data/mockData'
+import axiosInstance from '@/lib/axios'
+import { toast } from 'sonner'
+
+type Project = {
+  _id: string
+  name: string
+  description?: string
+  clientId?: {
+    _id: string
+    name: string
+  }
+  budget?: number
+  status?: string
+  startDate?: string
+  deadline?: string
+}
+
+type Client = {
+  _id: string
+  name: string
+  email?: string
+  status?: string
+}
 
 type DateRangeValue = '30d' | '3m' | '6m' | '12m' | 'custom'
 type TrendRangeValue = '3m' | '6m' | '12m'
@@ -39,62 +60,58 @@ const formatCurrency = (value = 0) =>
     maximumFractionDigits: 0,
   })
 
-const getClientName = (project: (typeof mockProjects)[number]) => {
+const getClientName = (project: Project) => {
   if (typeof project.clientId === 'string') return project.clientId
   return project.clientId?.name ?? 'Unknown client'
 }
 
-const isDateWithinRange = (date: Date, range: DateRangeValue) => {
-  if (range === 'custom') return true
-
-  const now = new Date()
-  const start = new Date(now)
-
-  if (range === '30d') {
-    start.setDate(now.getDate() - 30)
-  } else {
-    const monthDelta = range === '3m' ? 3 : range === '6m' ? 6 : 12
-    start.setMonth(now.getMonth() - monthDelta)
-  }
-
-  return date >= start && date <= now
-}
-
 const Reports = () => {
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const [projects, setProjects] = useState<Project[]>([])
+  const [clients, setClients] = useState<Client[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [dateRange, setDateRange] = useState<DateRangeValue>('3m')
   const [clientFilter, setClientFilter] = useState<string>('all')
   const [projectFilter, setProjectFilter] = useState<string>('all')
   const [trendRange, setTrendRange] = useState<TrendRangeValue>('6m')
 
+  useEffect(() => {
+    const fetchReportData = async () => {
+      try {
+        setIsLoading(true)
+        const [projectsRes, clientsRes] = await Promise.all([
+          axiosInstance.get('/projects', { params: { page: 1, limit: 100 } }),
+          axiosInstance.get('/clients', { params: { page: 1, limit: 100 } }),
+        ])
+        setProjects(projectsRes.data.data ?? [])
+        setClients(clientsRes.data.data ?? [])
+      } catch (error) {
+        toast.error('Failed to load reports data')
+        console.error(error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchReportData()
+  }, [])
+
   const selectedProjects = useMemo(() => {
-    return mockProjects.filter((project) => {
+    return projects.filter((project) => {
       const clientId = typeof project.clientId === 'string' ? project.clientId : project.clientId?._id
       const matchesClient = clientFilter === 'all' || clientId === clientFilter
-      const matchesProject = projectFilter === 'all' || project.id === projectFilter
+      const matchesProject = projectFilter === 'all' || project._id === projectFilter
       return matchesClient && matchesProject
     })
-  }, [clientFilter, projectFilter])
-
-  const selectedProjectIds = new Set(selectedProjects.map((project) => project.id))
+  }, [clientFilter, projectFilter, projects])
 
   const selectedPayments = useMemo(() => {
-    return Object.entries(mockProjectPaymentUpdates)
-      .filter(([projectId]) => selectedProjectIds.has(projectId))
-      .flatMap(([projectId, entries]) =>
-        entries
-          .map((entry) => ({
-            ...entry,
-            projectId,
-            dateObj: new Date(entry.date),
-          }))
-          .filter((entry) => !Number.isNaN(entry.dateObj.getTime()))
-      )
-  }, [selectedProjectIds])
+    // TODO: Fetch payments from API instead of calculating from mock data
+    return []
+  }, [])
 
-  const filteredPayments = selectedPayments.filter((entry) => isDateWithinRange(entry.dateObj, dateRange))
-
-  const projectFinancials = selectedProjects.map((project) => {
-    const paid = (mockProjectPaymentUpdates[project.id] ?? []).reduce((sum, item) => sum + item.amount, 0)
+  const projectFinancials = selectedProjects.map((project: any) => {
+    const paid = 0 // TODO: Fetch from API
     const budget = project.budget ?? 0
     const due = Math.max(budget - paid, 0)
     return {
@@ -104,39 +121,38 @@ const Reports = () => {
     }
   })
 
-  const totalEarnedAllTime = projectFinancials.reduce((sum, project) => sum + project.paid, 0)
-  const totalDueAllTime = projectFinancials.reduce((sum, project) => sum + project.due, 0)
+  const totalEarnedAllTime = projectFinancials.reduce((sum: number, project: any) => sum + project.paid, 0)
+  const totalDueAllTime = projectFinancials.reduce((sum: number, project: any) => sum + project.due, 0)
 
-  const now = new Date()
+  const now = useMemo(() => new Date(), [])
   const thisMonth = now.getMonth()
   const thisYear = now.getFullYear()
   const lastMonthDate = new Date(thisYear, thisMonth - 1, 1)
 
   const thisMonthEarned = selectedPayments
-    .filter((entry) => entry.dateObj.getMonth() === thisMonth && entry.dateObj.getFullYear() === thisYear)
-    .reduce((sum, entry) => sum + entry.amount, 0)
+    .filter((entry: any) => entry.dateObj.getMonth() === thisMonth && entry.dateObj.getFullYear() === thisYear)
+    .reduce((sum: number, entry: any) => sum + entry.amount, 0)
 
   const lastMonthEarned = selectedPayments
     .filter(
-      (entry) =>
+      (entry: any) =>
         entry.dateObj.getMonth() === lastMonthDate.getMonth() &&
         entry.dateObj.getFullYear() === lastMonthDate.getFullYear()
     )
-    .reduce((sum, entry) => sum + entry.amount, 0)
+    .reduce((sum: number, entry: any) => sum + entry.amount, 0)
 
   const thisMonthDue = selectedProjects
-    .filter((project) => {
+    .filter((project: any) => {
       if (!project.deadline) return false
       const deadlineDate = new Date(project.deadline)
       return deadlineDate.getMonth() === thisMonth && deadlineDate.getFullYear() === thisYear
     })
-    .reduce((sum, project) => {
-      const paid = (mockProjectPaymentUpdates[project.id] ?? []).reduce((acc, item) => acc + item.amount, 0)
-      return sum + Math.max((project.budget ?? 0) - paid, 0)
+    .reduce((sum: number, project: any) => {
+      return sum + Math.max((project.budget ?? 0), 0)
     }, 0)
 
   const lastMonthDue = selectedProjects
-    .filter((project) => {
+    .filter((project: any) => {
       if (!project.deadline) return false
       const deadlineDate = new Date(project.deadline)
       return (
@@ -144,9 +160,8 @@ const Reports = () => {
         deadlineDate.getFullYear() === lastMonthDate.getFullYear()
       )
     })
-    .reduce((sum, project) => {
-      const paid = (mockProjectPaymentUpdates[project.id] ?? []).reduce((acc, item) => acc + item.amount, 0)
-      return sum + Math.max((project.budget ?? 0) - paid, 0)
+    .reduce((sum: number, project: any) => {
+      return sum + Math.max((project.budget ?? 0), 0)
     }, 0)
 
   const earningsGrowthPct = lastMonthEarned > 0 ? ((thisMonthEarned - lastMonthEarned) / lastMonthEarned) * 100 : 0
@@ -166,7 +181,7 @@ const Reports = () => {
 
     const bucketMap = new Map(buckets.map((bucket) => [bucket.key, bucket]))
 
-    selectedPayments.forEach((payment) => {
+    selectedPayments.forEach((payment: any) => {
       const key = `${payment.dateObj.getFullYear()}-${payment.dateObj.getMonth()}`
       const bucket = bucketMap.get(key)
       if (bucket) {
@@ -188,7 +203,7 @@ const Reports = () => {
   )
 
   const statusBreakdown = projectFinancials.reduce(
-    (acc, project) => {
+    (acc: any, project: any) => {
       if (project.due <= 0 && project.paid > 0) {
         acc.paid += project.paid
       } else if (project.paid > 0 && project.due > 0) {
@@ -202,9 +217,9 @@ const Reports = () => {
   )
 
   const pendingProjects = projectFinancials
-    .filter((project) => project.due > 0)
-    .sort((a, b) => b.due - a.due)
-    .map((project) => {
+    .filter((project: any) => project.due > 0)
+    .sort((a: any, b: any) => b.due - a.due)
+    .map((project: any) => {
       const deadlineDate = project.deadline ? new Date(project.deadline) : null
       const daysLeft = deadlineDate ? Math.ceil((deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : null
       return {
@@ -213,21 +228,21 @@ const Reports = () => {
       }
     })
 
-  const clientRevenue = mockClients
+  const clientRevenue = clients
     .map((client) => {
       const revenue = projectFinancials
-        .filter((project) => {
+        .filter((project: any) => {
           const clientId = typeof project.clientId === 'string' ? project.clientId : project.clientId?._id
-          return clientId === client.id
+          return clientId === client._id
         })
-        .reduce((sum, project) => sum + project.paid, 0)
+        .reduce((sum: number, project: any) => sum + project.paid, 0)
 
       const due = projectFinancials
-        .filter((project) => {
+        .filter((project: any) => {
           const clientId = typeof project.clientId === 'string' ? project.clientId : project.clientId?._id
-          return clientId === client.id
+          return clientId === client._id
         })
-        .reduce((sum, project) => sum + project.due, 0)
+        .reduce((sum: number, project: any) => sum + project.due, 0)
 
       return {
         ...client,
@@ -243,6 +258,16 @@ const Reports = () => {
   const topClientShare = totalEarnedAllTime > 0 && topClients.length > 0
     ? (topClients[0].revenue / totalEarnedAllTime) * 100
     : 0
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto w-full max-w-7xl px-4 lg:px-8 py-8">
+        <div className="flex items-center justify-center py-12">
+          <p className="text-muted-foreground">Loading reports...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-8 px-4 py-6 lg:px-8 lg:py-8">
@@ -272,8 +297,8 @@ const Reports = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All clients</SelectItem>
-              {mockClients.map((client) => (
-                <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
+              {clients.map((client) => (
+                <SelectItem key={client._id} value={client._id}>{client.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -284,8 +309,8 @@ const Reports = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All projects</SelectItem>
-              {mockProjects.map((project) => (
-                <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>
+              {projects.map((project) => (
+                <SelectItem key={project._id} value={project._id}>{project.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -346,7 +371,7 @@ const Reports = () => {
                 <CartesianGrid vertical={false} strokeDasharray="3 3" />
                 <XAxis dataKey="month" tickLine={false} axisLine={false} />
                 <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                <Tooltip formatter={(value: any) => formatCurrency(value ?? 0)} />
                 <Bar dataKey="earned" fill="#0ea5e9" radius={[6, 6, 0, 0]} isAnimationActive={false} />
               </BarChart>
             </ResponsiveContainer>
@@ -402,7 +427,7 @@ const Reports = () => {
               {pendingProjects.slice(0, 6).map((project) => {
                 const isOverdue = (project.daysLeft ?? 0) < 0
                 return (
-                  <TableRow key={project.id}>
+                  <TableRow key={project._id}>
                     <TableCell className="font-medium">{project.name}</TableCell>
                     <TableCell>{getClientName(project)}</TableCell>
                     <TableCell className="text-right font-semibold">{formatCurrency(project.due)}</TableCell>
@@ -433,7 +458,7 @@ const Reports = () => {
               </TableHeader>
               <TableBody>
                 {topClients.map((client) => (
-                  <TableRow key={client.id}>
+                  <TableRow key={client._id}>
                     <TableCell>{client.name}</TableCell>
                     <TableCell className="text-right font-semibold">{formatCurrency(client.revenue)}</TableCell>
                   </TableRow>
@@ -455,7 +480,7 @@ const Reports = () => {
               </TableHeader>
               <TableBody>
                 {riskClients.map((client) => (
-                  <TableRow key={client.id}>
+                  <TableRow key={client._id}>
                     <TableCell>{client.name}</TableCell>
                     <TableCell className="text-right font-semibold text-red-600 dark:text-red-400">{formatCurrency(client.due)}</TableCell>
                   </TableRow>

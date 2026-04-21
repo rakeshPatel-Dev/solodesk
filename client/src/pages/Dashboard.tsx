@@ -1,28 +1,29 @@
-import { memo, useMemo } from "react"
+import { memo, useMemo, useState, useEffect } from "react"
 import { ChartAreaInteractive } from '@/components/sections/dashboard/chart'
 import StatsCard from '@/components/shared/StatsCard'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { dashboardStats } from '@/data/mockData'
-import { ArrowRight, BookOpen, DoorOpen, FolderPlus, UserPlus } from 'lucide-react'
+import { toast } from 'sonner'
+import axiosInstance from '@/lib/axios'
+import { ArrowRight, BookOpen, DoorOpen, FolderPlus, UserPlus, BadgeDollarSign, ClipboardList } from 'lucide-react'
 
 const recentActivities = [
   {
     id: '1',
     title: 'New client added',
-    description: 'Acme Studio was added to your client list.',
+    description: 'Client was added to your client list.',
     time: '2h ago',
   },
   {
     id: '2',
     title: 'Project updated',
-    description: 'Website Redesign moved to In Progress.',
+    description: 'Project moved to In Progress.',
     time: '5h ago',
   },
   {
     id: '3',
     title: 'Payment received',
-    description: 'Invoice #INV-203 was marked as paid.',
+    description: 'Invoice was marked as paid.',
     time: 'Yesterday',
   },
 ]
@@ -51,12 +52,86 @@ const RecentActivityItem = memo(({ activity }: { activity: typeof recentActiviti
 RecentActivityItem.displayName = 'RecentActivityItem'
 
 const Dashboard = () => {
+  const [isLoading, setIsLoading] = useState(true)
+  const [projectStats, setProjectStats] = useState({ total: 0, active: 0, completed: 0, totalBudget: 0, totalPaid: 0 })
+  const [clientStats, setClientStats] = useState({ total: 0, active: 0 })
+  const [paymentStats, setPaymentStats] = useState({ totalInvoiced: 0, paid: 0, pending: 0, overdue: 0 })
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setIsLoading(true)
+        const [projectsRes, clientsRes, paymentsRes] = await Promise.all([
+          axiosInstance.get('/projects', { params: { page: 1, limit: 100 } }),
+          axiosInstance.get('/clients', { params: { page: 1, limit: 100 } }),
+          axiosInstance.get('/payments', { params: { page: 1, limit: 100 } }),
+        ])
+
+        const projects = projectsRes.data.data ?? []
+        const clients = clientsRes.data.data ?? []
+        const payments = paymentsRes.data.data ?? []
+
+        // Calculate project stats
+        setProjectStats({
+          total: projects.length,
+          active: projects.filter((p: any) => p.status === 'Lead' || p.status === 'In Progress').length,
+          completed: projects.filter((p: any) => p.status === 'Completed').length,
+          totalBudget: projects.reduce((sum: number, p: any) => sum + (p.budget ?? 0), 0),
+          totalPaid: projects.reduce((sum: number, p: any) => sum + (p.budget ?? 0), 0) * 0.65, // Placeholder
+        })
+
+        // Calculate client stats
+        setClientStats({
+          total: clients.length,
+          active: clients.filter((c: any) => c.status === 'Active').length,
+        })
+
+        // Calculate payment stats
+        const toAmount = (value: string | number) => {
+          if (typeof value === 'number') return value
+          return Number(String(value).replace(/[^\d.]/g, ''))
+        }
+
+        setPaymentStats({
+          totalInvoiced: payments.reduce((sum: number, p: any) => sum + toAmount(p.amount), 0),
+          paid: payments.filter((p: any) => p.status === 'Paid').length,
+          pending: payments.filter((p: any) => p.status === 'Pending').length,
+          overdue: payments.filter((p: any) => p.status === 'Overdue').reduce((sum: number, p: any) => sum + toAmount(p.amount), 0),
+        })
+      } catch (error) {
+        toast.error('Failed to load dashboard data')
+        console.error(error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchDashboardData()
+  }, [])
+
+  const dashboardStats = useMemo(() => [
+    { title: 'Total Revenue', value: `$${projectStats.totalPaid.toLocaleString()}`, icon: BadgeDollarSign, subTitle: '12% from last month', trend: '12%', trendDirection: 'up' as const },
+    { title: 'Paid Invoices', value: paymentStats.paid, icon: ClipboardList, subTitle: 'All clear this week', trend: '80%', trendDirection: 'neutral' as const },
+    { title: 'Outstanding', value: `$${paymentStats.overdue.toLocaleString()}`, icon: FolderPlus, subTitle: '3 overdue notices sent', trend: '2.5%', trendDirection: 'down' as const },
+    { title: 'Active Projects', value: projectStats.active, icon: FolderPlus, subTitle: 'Currently in progress', trend: '3.9%', trendDirection: 'up' as const },
+  ], [projectStats, paymentStats])
+
   const welcomeMessage = useMemo(() => {
     const hour = new Date().getHours()
     if (hour < 12) return 'Good morning'
     if (hour < 18) return 'Good afternoon'
     return 'Good evening'
   }, [])
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto w-full max-w-7xl px-4 lg:px-8 py-8">
+        <div className="flex items-center justify-center py-12">
+          <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-8 px-4 py-6 lg:px-8 lg:py-4">

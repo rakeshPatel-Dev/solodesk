@@ -39,8 +39,8 @@ const paymentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// 🔥 Auto-calc logic
-paymentSchema.pre("save", function (next) {
+// Auto-calc derived fields before persisting.
+paymentSchema.pre("save", function () {
   this.dueAmount = this.totalAmount - this.paidAmount;
 
   if (this.paidAmount === 0) {
@@ -50,8 +50,6 @@ paymentSchema.pre("save", function (next) {
   } else {
     this.status = "Paid";
   }
-
-  next();
 });
 
 // Enforce one payment record per project per user at DB level.
