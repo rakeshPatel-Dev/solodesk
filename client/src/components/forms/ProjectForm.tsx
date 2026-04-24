@@ -1,6 +1,17 @@
-import { useEffect, useMemo, useState } from "react"
+import React, { useEffect, useMemo, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { toast } from "sonner"
+import { motion, AnimatePresence } from "framer-motion"
+import {
+  Briefcase,
+  Building2,
+  FileText,
+  Calendar,
+  DollarSign,
+  CheckCircle2,
+  Clock,
+  Loader2
+} from "lucide-react"
 
 import axiosInstance from "@/lib/axios"
 import { cn } from "@/lib/utils"
@@ -25,6 +36,12 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 
 type ProjectStatus = "Lead" | "In Progress" | "Completed"
+
+const statusConfig = {
+  Lead: { label: "Lead", variant: "secondary" as const, icon: Clock },
+  "In Progress": { label: "In Progress", variant: "default" as const, icon: Loader2 },
+  Completed: { label: "Completed", variant: "success" as const, icon: CheckCircle2 },
+}
 
 type ProjectFormValues = {
   name: string
@@ -60,17 +77,44 @@ type ProjectFormProps = React.ComponentProps<"div"> & {
   }) => Promise<void> | void
   onSuccess?: () => void
   submitLabel?: string
+  cancelLabel?: string
+  initialValues?: Partial<ProjectFormValues>
+  projectId?: string
+  showCancel?: boolean
+  compact?: boolean
 }
 
 const getDateInputValue = (date: Date) => {
+  // Validate that the date is valid
+  if (isNaN(date.getTime())) {
+    return getDefaultDate()
+  }
   const offset = date.getTimezoneOffset() * 60000
   return new Date(date.getTime() - offset).toISOString().split("T")[0]
 }
 
-const getTodayDate = () => getDateInputValue(new Date())
+const getDefaultDate = () => {
+  const date = new Date()
+  const offset = date.getTimezoneOffset() * 60000
+  return new Date(date.getTime() - offset).toISOString().split("T")[0]
+}
+
+const getTodayDate = () => getDefaultDate()
 
 const getDeadlineOptions = (baseDate: string) => {
-  const start = baseDate ? new Date(`${baseDate}T00:00:00`) : new Date()
+  // Validate baseDate before using it
+  let start: Date
+
+  if (baseDate && !isNaN(new Date(baseDate).getTime())) {
+    start = new Date(`${baseDate}T00:00:00`)
+  } else {
+    start = new Date()
+  }
+
+  // Validate that start date is valid
+  if (isNaN(start.getTime())) {
+    start = new Date()
+  }
 
   return [1, 2, 3, 4, 5].map((days) => {
     const nextDate = new Date(start)
@@ -83,24 +127,47 @@ const getDeadlineOptions = (baseDate: string) => {
   })
 }
 
-function getErrorMessage(error: unknown) {
-  if (typeof error === "object" && error !== null && "response" in error) {
-    const response = (error as { response?: { data?: { message?: string } } }).response
-    if (response?.data?.message) {
-      return response.data.message
+function getErrorMessage(error: unknown): string {
+  if (typeof error === "object" && error !== null) {
+    if ("response" in error) {
+      const response = (error as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } }).response
+      if (response?.data?.message) return response.data.message
+      if (response?.data?.errors) {
+        const firstError = Object.values(response.data.errors)[0]
+        if (firstError && firstError[0]) return firstError[0]
+      }
     }
+    if (error instanceof Error && error.message) return error.message
   }
-
-  if (error instanceof Error && error.message) {
-    return error.message
-  }
-
-  return "Unable to create project."
+  return "Unable to process request. Please try again."
 }
 
-function ProjectForm({ className, onSubmit, onSuccess, submitLabel = "Add Project", ...props }: ProjectFormProps) {
+function ProjectForm({
+  className,
+  onSubmit,
+  onSuccess,
+  submitLabel = "Create Project",
+  cancelLabel = "Cancel",
+  initialValues,
+  projectId,
+  showCancel = false,
+  compact = false,
+  ...props
+}: ProjectFormProps) {
+  const isEditMode = !!projectId
   const [isLoadingClients, setIsLoadingClients] = useState(true)
   const [clients, setClients] = useState<ClientOption[]>([])
+
+  const defaultInitialValues: ProjectFormValues = {
+    name: "",
+    description: "",
+    clientId: "",
+    type: "",
+    budget: "",
+    status: "Lead",
+    startDate: getTodayDate(),
+    deadline: "",
+  }
 
   const {
     register,
@@ -109,23 +176,30 @@ function ProjectForm({ className, onSubmit, onSuccess, submitLabel = "Add Projec
     watch,
     reset,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty, isValid },
   } = useForm<ProjectFormValues>({
-    defaultValues: {
-      name: "",
-      description: "",
-      clientId: "",
-      type: "",
-      budget: "",
-      status: "Lead",
-      startDate: getTodayDate(),
-      deadline: "",
-    },
-    mode: "onBlur",
+    defaultValues: { ...defaultInitialValues, ...initialValues },
+    mode: "onChange",
   })
 
   const startDate = watch("startDate")
-  const deadlineOptions = useMemo(() => getDeadlineOptions(startDate), [startDate])
+  const deadlineOptions = useMemo(() => getDeadlineOptions(startDate || getTodayDate()), [startDate])
+  const watchedStatus = watch("status")
+
+  // Reset form when initialValues change (e.g., editing different project)
+  useEffect(() => {
+    if (initialValues) {
+      // Validate and sanitize startDate from initialValues
+      const sanitizedValues = {
+        ...defaultInitialValues,
+        ...initialValues,
+        startDate: initialValues.startDate && !isNaN(new Date(initialValues.startDate).getTime())
+          ? initialValues.startDate
+          : getTodayDate(),
+      }
+      reset(sanitizedValues)
+    }
+  }, [initialValues, reset])
 
   useEffect(() => {
     const fetchClients = async () => {
@@ -164,26 +238,31 @@ function ProjectForm({ className, onSubmit, onSuccess, submitLabel = "Add Projec
       deadline: normalizedValues.deadline || undefined,
     }
 
+    const loadingToast = toast.loading(
+      isEditMode ? "Updating project..." : "Creating project..."
+    )
+
     try {
       if (onSubmit) {
         await onSubmit(payload)
+      } else if (isEditMode && projectId) {
+        await axiosInstance.put(`/projects/${projectId}`, payload)
       } else {
         await axiosInstance.post("/projects", payload)
       }
 
-      toast.success("Project created successfully.")
-      reset({
-        name: "",
-        description: "",
-        clientId: "",
-        type: "",
-        budget: "",
-        status: "Lead",
-        startDate: getTodayDate(),
-        deadline: "",
+      toast.dismiss(loadingToast)
+      toast.success(isEditMode ? "Project updated successfully" : "Project created successfully", {
+        icon: "🎉",
+        duration: 4000,
       })
+
+      if (!isEditMode) {
+        reset(defaultInitialValues)
+      }
       onSuccess?.()
     } catch (error) {
+      toast.dismiss(loadingToast)
       toast.error(getErrorMessage(error))
     }
   }
@@ -192,170 +271,309 @@ function ProjectForm({ className, onSubmit, onSuccess, submitLabel = "Add Projec
     <div className={cn("w-full", className)} {...props}>
       <Card className="border-border/60">
         <CardHeader>
-          <CardTitle>Add Project</CardTitle>
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <CardTitle className="flex items-center gap-2">
+              <Briefcase className="h-5 w-5" />
+              {isEditMode ? "Edit Project" : "Create Project"}
+            </CardTitle>
+          </motion.div>
         </CardHeader>
         <CardContent>
           <form className="space-y-5" onSubmit={handleSubmit(submitForm)}>
             <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="project-name">Project Name</FieldLabel>
-                <Input
-                  id="project-name"
-                  placeholder="Website Redesign"
-                  aria-invalid={!!errors.name}
-                  {...register("name", {
-                    required: "Project name is required.",
-                    validate: (value) => value.trim().length >= 2 || "Project name must be at least 2 characters.",
-                  })}
-                />
-                <FieldError>{errors.name?.message}</FieldError>
-              </Field>
+              {/* Project Name */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: 0.05 }}
+              >
+                <Field>
+                  <FieldLabel htmlFor="project-name" className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    Project Name
+                  </FieldLabel>
+                  <Input
+                    id="project-name"
+                    placeholder="Website Redesign"
+                    aria-invalid={!!errors.name}
+                    {...register("name", {
+                      required: "Project name is required.",
+                      validate: (value) => value.trim().length >= 2 || "Project name must be at least 2 characters.",
+                    })}
+                  />
+                  <FieldError>{errors.name?.message}</FieldError>
+                </Field>
+              </motion.div>
 
-              <Field>
-                <FieldLabel htmlFor="project-client">Client</FieldLabel>
-                <Controller
-                  control={control}
-                  name="clientId"
-                  rules={{ required: "Please select a client." }}
-                  render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange} disabled={isLoadingClients}>
-                      <SelectTrigger id="project-client" className="w-full" aria-invalid={!!errors.clientId}>
-                        <SelectValue placeholder={isLoadingClients ? "Loading clients..." : "Select client"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {clients.map((client) => (
-                          <SelectItem key={client._id} value={client._id}>
-                            {client.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-                <FieldError>{errors.clientId?.message}</FieldError>
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="project-type">Project Type</FieldLabel>
-                <Input
-                  id="project-type"
-                  placeholder="Design, Development, Marketing"
-                  {...register("type")}
-                />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="project-status">Status</FieldLabel>
-                <Controller
-                  control={control}
-                  name="status"
-                  render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger id="project-status" className="w-full">
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Lead">Lead</SelectItem>
-                        <SelectItem value="In Progress">In Progress</SelectItem>
-                        <SelectItem value="Completed">Completed</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="project-budget">Budget</FieldLabel>
-                <Input
-                  id="project-budget"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="5000"
-                  aria-invalid={!!errors.budget}
-                  {...register("budget", {
-                    validate: (value) => {
-                      if (!value.trim()) return true
-                      const numericValue = Number(value)
-                      if (Number.isNaN(numericValue)) return "Budget must be a valid number."
-                      if (numericValue < 0) return "Budget cannot be negative."
-                      return true
-                    },
-                  })}
-                />
-                <FieldError>{errors.budget?.message}</FieldError>
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="project-start-date">Start Date</FieldLabel>
-                <Input
-                  id="project-start-date"
-                  type="date"
-                  {...register("startDate")}
-                />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="project-deadline">Deadline</FieldLabel>
-                <div className="space-y-3">
-                  <div className="flex flex-wrap gap-2">
-                    {deadlineOptions.map((option) => (
-                      <Badge
-                        key={option.value}
-                        variant="outline"
-                        className="cursor-pointer hover:bg-primary/10 hover:text-primary transition-colors"
-                        onClick={() => setValue("deadline", option.value)}
-                      >
-                        {option.label}
-                      </Badge>
-                    ))}
-                  </div>
+              {/* Client Selection */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: 0.1 }}
+              >
+                <Field>
+                  <FieldLabel htmlFor="project-client" className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-muted-foreground" />
+                    Client
+                  </FieldLabel>
                   <Controller
                     control={control}
-                    name="deadline"
-                    rules={{
-                      validate: (value) => {
-                        if (!value || !startDate) return true
-                        const start = new Date(`${startDate}T00:00:00`)
-                        const end = new Date(`${value}T00:00:00`)
-                        return end >= start || "Deadline must be after the start date."
-                      },
-                    }}
+                    name="clientId"
+                    rules={{ required: "Please select a client." }}
                     render={({ field }) => (
-                      <Input
-                        id="project-deadline"
-                        type="date"
-                        aria-invalid={!!errors.deadline}
-                        {...field}
-                      />
+                      <Select value={field.value} onValueChange={field.onChange} disabled={isLoadingClients}>
+                        <SelectTrigger id="project-client" className="w-full" aria-invalid={!!errors.clientId}>
+                          <SelectValue placeholder={isLoadingClients ? "Loading clients..." : "Select client"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {clients.map((client) => (
+                            <SelectItem key={client._id} value={client._id}>
+                              {client.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     )}
                   />
-                </div>
-                <FieldDescription>
-                  Click a quick option or select a custom date.
-                </FieldDescription>
-                <FieldError>{errors.deadline?.message}</FieldError>
-              </Field>
+                  <FieldError>{errors.clientId?.message}</FieldError>
+                </Field>
+              </motion.div>
 
-              <Field>
-                <FieldLabel htmlFor="project-description">Description</FieldLabel>
-                <Textarea
-                  id="project-description"
-                  placeholder="Project overview, goals, and scope"
-                  aria-invalid={!!errors.description}
-                  {...register("description", {
-                    validate: (value) => value.length <= 1000 || "Description cannot exceed 1000 characters.",
-                  })}
-                />
-                <FieldDescription>
-                  Include important delivery details your team should know.
-                </FieldDescription>
-                <FieldError>{errors.description?.message}</FieldError>
-              </Field>
+              {/* Project Type */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: 0.15 }}
+              >
+                <Field>
+                  <FieldLabel htmlFor="project-type" className="flex items-center gap-2">
+                    <Briefcase className="h-4 w-4 text-muted-foreground" />
+                    Project Type
+                  </FieldLabel>
+                  <Input
+                    id="project-type"
+                    placeholder="Design, Development, Marketing"
+                    {...register("type")}
+                  />
+                </Field>
+              </motion.div>
 
-              <Button type="submit" className="w-full sm:w-auto" disabled={isSubmitting || isLoadingClients}>
-                {isSubmitting ? "Saving..." : submitLabel}
-              </Button>
+              {/* Status */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: 0.2 }}
+              >
+                <Field>
+                  <FieldLabel htmlFor="project-status" className="flex items-center gap-2">
+                    {statusConfig[watchedStatus]?.icon &&
+                      React.createElement(statusConfig[watchedStatus].icon as any, { className: "h-4 w-4 text-muted-foreground" })
+                    }
+                    Status
+                  </FieldLabel>
+                  <Controller
+                    control={control}
+                    name="status"
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger id="project-status" className="w-full">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(statusConfig).map(([key, config]) => (
+                            <SelectItem key={key} value={key}>
+                              <div className="flex items-center gap-2">
+                                {React.createElement(config.icon as any, { className: "h-4 w-4" })}
+                                <span>{config.label}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  {watchedStatus && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <Badge variant={statusConfig[watchedStatus]?.variant} className="mt-2">
+                        {statusConfig[watchedStatus]?.label}
+                      </Badge>
+                    </motion.div>
+                  )}
+                </Field>
+              </motion.div>
+
+              {/* Budget */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: 0.25 }}
+              >
+                <Field>
+                  <FieldLabel htmlFor="project-budget" className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                    Budget
+                  </FieldLabel>
+                  <Input
+                    id="project-budget"
+                    type="number"
+                    step="50"
+                    min="0"
+                    placeholder="5000"
+                    aria-invalid={!!errors.budget}
+                    {...register("budget", {
+                      validate: (value) => {
+                        if (!value.trim()) return true
+                        const numericValue = Number(value)
+                        if (Number.isNaN(numericValue)) return "Budget must be a valid number."
+                        if (numericValue < 0) return "Budget cannot be negative."
+                        return true
+                      },
+                    })}
+                  />
+                  <FieldError>{errors.budget?.message}</FieldError>
+                </Field>
+              </motion.div>
+
+              {/* Dates Section */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: 0.3 }}
+              >
+                <Field>
+                  <FieldLabel htmlFor="project-start-date" className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    Start Date
+                  </FieldLabel>
+                  <Input
+                    id="project-start-date"
+                    type="date"
+                    {...register("startDate")}
+                  />
+                </Field>
+              </motion.div>
+
+              {/* Deadline */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: 0.35 }}
+              >
+                <Field>
+                  <FieldLabel htmlFor="project-deadline" className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    Deadline
+                  </FieldLabel>
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      <AnimatePresence mode="wait">
+                        {deadlineOptions.map((option, index) => (
+                          <motion.div
+                            key={option.value}
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.2, delay: 0.35 + index * 0.05 }}
+                          >
+                            <Badge
+                              variant="outline"
+                              className="cursor-pointer hover:bg-primary/10 hover:text-primary transition-colors"
+                              onClick={() => setValue("deadline", option.value)}
+                            >
+                              {option.label}
+                            </Badge>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                    <Controller
+                      control={control}
+                      name="deadline"
+                      rules={{
+                        validate: (value) => {
+                          if (!value || !startDate) return true
+                          const start = new Date(`${startDate}T00:00:00`)
+                          const end = new Date(`${value}T00:00:00`)
+                          // Check if dates are valid before comparing
+                          if (isNaN(start.getTime()) || isNaN(end.getTime())) return true
+                          return end >= start || "Deadline must be after the start date."
+                        },
+                      }}
+                      render={({ field }) => (
+                        <Input
+                          id="project-deadline"
+                          type="date"
+                          aria-invalid={!!errors.deadline}
+                          {...field}
+                        />
+                      )}
+                    />
+                  </div>
+                  <FieldDescription>
+                    Click a quick option or select a custom date.
+                  </FieldDescription>
+                  <FieldError>{errors.deadline?.message}</FieldError>
+                </Field>
+              </motion.div>
+
+              {/* Description */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: 0.4 }}
+              >
+                <Field>
+                  <FieldLabel htmlFor="project-description" className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    Description
+                  </FieldLabel>
+                  <Textarea
+                    id="project-description"
+                    placeholder="Project overview, goals, and scope"
+                    aria-invalid={!!errors.description}
+                    {...register("description", {
+                      validate: (value) => value.length <= 1000 || "Description cannot exceed 1000 characters.",
+                    })}
+                  />
+                  <FieldDescription>
+                    Include important delivery details your team should know.
+                  </FieldDescription>
+                  <FieldError>{errors.description?.message}</FieldError>
+                </Field>
+              </motion.div>
+
+              {/* Actions */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: 0.45 }}
+                className="flex gap-3 pt-2"
+              >
+                <Button
+                  type="submit"
+                  className="w-full sm:w-auto"
+                  disabled={isSubmitting || isLoadingClients}
+                >
+                  {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {isSubmitting ? (isEditMode ? "Updating..." : "Creating...") : (submitLabel || (isEditMode ? "Update Project" : "Create Project"))}
+                </Button>
+                {showCancel && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                  >
+                    {cancelLabel}
+                  </Button>
+                )}
+              </motion.div>
             </FieldGroup>
           </form>
         </CardContent>
