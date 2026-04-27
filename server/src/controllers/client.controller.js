@@ -1,5 +1,6 @@
 // controllers/client.controller.js
 import Client from "../models/client.model.js";
+import Project from "../models/project.model.js";
 import {
   sendBadRequestError,
   sendNotFoundError,
@@ -240,7 +241,7 @@ export const deleteClient = async (req, res) => {
 // @access  Private
 export const getClientStats = async (req, res) => {
   try {
-    const [totalClients, activeClients, inactiveClients, recentClients] =
+    const [totalClients, activeClients, inactiveClients, recentClients, projects] =
       await Promise.all([
         Client.countDocuments({ userId: req.user.id }),
         Client.countDocuments({ userId: req.user.id, status: "Active" }),
@@ -249,7 +250,20 @@ export const getClientStats = async (req, res) => {
           .sort({ createdAt: -1 })
           .limit(5)
           .select("name email status createdAt"),
+        Project.find({ userId: req.user.id }).select("paidAmount payments"),
       ]);
+
+    const totalSpend = projects.reduce((sum, project) => {
+      if (typeof project.paidAmount === "number") {
+        return sum + project.paidAmount;
+      }
+
+      const derivedPaidAmount = Array.isArray(project.payments)
+        ? project.payments.reduce((paymentSum, payment) => paymentSum + (payment.amount || 0), 0)
+        : 0;
+
+      return sum + derivedPaidAmount;
+    }, 0);
 
     res.status(200).json({
       success: true,
@@ -257,6 +271,7 @@ export const getClientStats = async (req, res) => {
         total: totalClients,
         active: activeClients,
         inactive: inactiveClients,
+        totalSpend,
         recent: recentClients,
       },
     });
