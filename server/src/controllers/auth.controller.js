@@ -22,6 +22,23 @@ import {
 
 const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CLIENT_URL || "http://localhost:5173";
 
+const normalizeProfileImage = (value) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+};
+
 // @desc    Register new user
 // @route   POST /api/auth/register
 // @access  Public
@@ -147,6 +164,8 @@ export const login = async (req, res) => {
     return sendServerError(res, "Login error", error, "Server error during login");
   }
 };
+
+
 
 // @desc    Get current logged in user
 // @route   GET /api/auth/me
@@ -325,6 +344,126 @@ export const changePassword = async (req, res) => {
     });
   } catch (error) {
     return sendServerError(res, "Change password error", error, "Server error");
+  }
+};
+
+// @desc    Update authenticated user profile
+// @route   PUT /api/auth/update-profile
+// @access  Private
+export const updateProfile = async (req, res) => {
+  try {
+    const { name, email, avatar, image } = req.body;
+    const nextImage = normalizeProfileImage(
+      Object.prototype.hasOwnProperty.call(req.body, "image") ? image : avatar
+    );
+
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return sendNotFoundError(res, "User not found");
+    }
+
+    if (name !== undefined) {
+      if (!name || !name.trim()) {
+        return sendBadRequestError(res, "Name cannot be empty");
+      }
+
+      user.name = name.trim();
+    }
+
+    if (email !== undefined) {
+      if (!email || !isValidEmail(email)) {
+        return sendBadRequestError(res, "Valid email is required");
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      const emailExists = await User.findOne({
+        email: normalizedEmail,
+        _id: { $ne: user._id },
+      });
+
+      if (emailExists) {
+        return sendConflictError(res, "User already exists with this email");
+      }
+
+      user.email = normalizedEmail;
+    }
+
+    if (nextImage !== undefined) {
+      if (typeof nextImage !== "string" && nextImage !== null) {
+        return sendBadRequestError(res, "Avatar image must be a string or null");
+      }
+
+      user.avatar = nextImage;
+    }
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+        avatar: user.avatar,
+        image: user.avatar,
+        lastLogin: user.lastLogin,
+        updatedAt: user.updatedAt,
+      },
+    });
+  } catch (error) {
+    return sendServerError(res, "Update profile error", error, "Server error while updating profile");
+  }
+};
+
+// @desc    Update authenticated user avatar only
+// @route   PATCH /api/auth/avatar
+// @access  Private
+export const updateAvatar = async (req, res) => {
+  try {
+    const { avatar, image } = req.body;
+    const nextAvatar = normalizeProfileImage(
+      Object.prototype.hasOwnProperty.call(req.body, "avatar") ? avatar : image
+    );
+
+    if (nextAvatar === undefined) {
+      return sendBadRequestError(res, "Avatar is required");
+    }
+
+    if (typeof nextAvatar !== "string" && nextAvatar !== null) {
+      return sendBadRequestError(res, "Avatar image must be a string or null");
+    }
+
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return sendNotFoundError(res, "User not found");
+    }
+
+    user.avatar = nextAvatar;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: nextAvatar ? "Avatar updated successfully" : "Avatar removed successfully",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+        avatar: user.avatar,
+        image: user.avatar,
+        lastLogin: user.lastLogin,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
+    });
+  } catch (error) {
+    return sendServerError(res, "Update avatar error", error, "Server error while updating avatar");
   }
 };
 

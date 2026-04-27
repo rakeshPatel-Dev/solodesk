@@ -6,6 +6,8 @@ import {
   forgotPassword,
   resetPassword,
   changePassword,
+  updateProfile,
+  updateAvatar,
   logout,
   deactivateAccount,
   deleteAccount,
@@ -21,6 +23,8 @@ router.post("/reset-password/:resetToken", resetPassword);
 router.post("/logout", authenticateUser, logout);
 
 router.put("/change-password", authenticateUser, changePassword);
+router.put("/update-profile", authenticateUser, updateProfile);
+router.patch("/avatar", authenticateUser, updateAvatar);
 router.put("/deactivate-account", authenticateUser, deactivateAccount);
 router.delete("/delete-account", authenticateUser, deleteAccount);
 

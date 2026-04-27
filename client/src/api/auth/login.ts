@@ -44,6 +44,22 @@ export const changePassword = async (currentPassword: string, newPassword: strin
   return response.data;
 }
 
+// function to update profile
+export const updateProfile = async (data: {
+  name?: string
+  email?: string
+  image?: string | null
+}) => {
+  const response = await axiosInstance.put("/auth/update-profile", data);
+  return response.data;
+}
+
+// function to update avatar only
+export const updateAvatar = async (avatar: string | null) => {
+  const response = await axiosInstance.patch("/auth/avatar", { avatar });
+  return response.data;
+}
+
 // function to deactivate account
 export const deactivateAccount = async () => {
   const response = await axiosInstance.put("/auth/deactivate-account");

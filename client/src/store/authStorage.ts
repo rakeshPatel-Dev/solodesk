@@ -7,6 +7,7 @@ export type AuthUser = {
   avatar?: string | null
   lastLogin?: string | null
   createdAt?: string
+  updatedAt?: string
 }
 
 export type StoredAuthState = {

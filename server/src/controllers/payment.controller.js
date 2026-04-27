@@ -26,6 +26,7 @@ const toIsoDateOrNull = (value) => {
   return parsed;
 };
 
+
 const toProjectWithLegacyStatus = (projectDoc) => {
   const project = projectDoc?.toObject ? projectDoc.toObject() : projectDoc;
 
