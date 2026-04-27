@@ -13,7 +13,6 @@ import Payments from './pages/payments/Payments'
 import AddPayment from './pages/payments/AddPayment'
 import Tasks from './pages/tasks/Tasks'
 import AddTask from './pages/tasks/AddTask'
-import Reports from './pages/Reports'
 import Footer from './components/layout/Footer'
 import Date from './components/shared/Date'
 import LoginPage from './pages/auth/login'
@@ -137,7 +136,6 @@ const App = () => {
             <Route path="/settings" element={<Settings />} />
             <Route path="/account" element={<Account />} />
             <Route path="/notifications" element={<Notifications />} />
-            <Route path="/reports" element={<Reports />} />
             <Route path="/auth" element={<Navigate to="/auth/login" replace />} />
             <Route path="/auth/login" element={<Navigate to="/dashboard" replace />} />
             <Route path="/auth/signup" element={<Navigate to="/dashboard" replace />} />

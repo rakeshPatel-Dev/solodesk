@@ -32,6 +32,11 @@ type Project = {
   status?: 'Lead' | 'In Progress' | 'Completed'
   startDate?: string
   deadline?: string
+  payments?: Array<{
+    amount: number
+    date: string
+    note?: string
+  }>
 }
 
 type PaymentUpdate = {
@@ -76,7 +81,6 @@ const ProjectDetail = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [paymentUpdates, setPaymentUpdates] = useState<PaymentUpdate[]>([])
   const [amountInput, setAmountInput] = useState('')
-  const [dateInput, setDateInput] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [isSavingPayment, setIsSavingPayment] = useState(false)
 
@@ -85,13 +89,18 @@ const ProjectDetail = () => {
       if (!id) return
       try {
         setIsLoading(true)
-        const [projectResponse, paymentTxResponse] = await Promise.all([
-          axiosInstance.get(`/projects/${id}`),
-          axiosInstance.get(`/payments/project/${id}/transactions`),
-        ])
+        const projectResponse = await axiosInstance.get(`/projects/${id}`)
+        const projectData = projectResponse.data.data
 
-        setProject(projectResponse.data.data)
-        setPaymentUpdates(paymentTxResponse.data.data ?? [])
+        setProject(projectData)
+        setPaymentUpdates(
+          (projectData?.payments ?? []).map((entry: { amount: number; date: string; note?: string }, index: number) => ({
+            _id: `${projectData._id}-${index}-${new Date(entry.date).getTime()}`,
+            amount: entry.amount,
+            date: entry.date,
+            note: entry.note,
+          }))
+        )
       } catch (error) {
         toast.error('Failed to load project')
         console.error(error)
@@ -141,8 +150,8 @@ const ProjectDetail = () => {
   const handleAddPayment = async () => {
     const parsedAmount = Number(amountInput)
 
-    if (!parsedAmount || parsedAmount <= 0 || !dateInput) {
-      toast.error('Enter a valid amount and date')
+    if (!parsedAmount || parsedAmount <= 0) {
+      toast.error('Enter a valid payment amount')
       return
     }
 
@@ -150,15 +159,25 @@ const ProjectDetail = () => {
 
     try {
       setIsSavingPayment(true)
-      const response = await axiosInstance.post(`/payments/project/${id}/transactions`, {
+      await axiosInstance.post(`/payments/${id}/add-payment`, {
         amount: parsedAmount,
-        date: dateInput,
       })
 
-      setPaymentUpdates((prev) => [response.data.data, ...prev])
+      const refreshedProjectResponse = await axiosInstance.get(`/projects/${id}`)
+      const refreshedProject = refreshedProjectResponse.data.data
+
+      setProject(refreshedProject)
+      setPaymentUpdates(
+        (refreshedProject?.payments ?? []).map((entry: { amount: number; date: string; note?: string }, index: number) => ({
+          _id: `${refreshedProject._id}-${index}-${new Date(entry.date).getTime()}`,
+          amount: entry.amount,
+          date: entry.date,
+          note: entry.note,
+        }))
+      )
+
       toast.success('Payment recorded')
       setAmountInput('')
-      setDateInput('')
       setDialogOpen(false)
     } catch (error) {
       toast.error('Failed to save payment')
@@ -335,17 +354,6 @@ const ProjectDetail = () => {
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label htmlFor="payment-date" className="text-xs font-medium text-muted-foreground">
-                    When Did You Get It? 📅
-                  </label>
-                  <Input
-                    id="payment-date"
-                    type="date"
-                    value={dateInput}
-                    onChange={(event) => setDateInput(event.target.value)}
-                  />
-                </div>
               </div>
 
               <DialogFooter>

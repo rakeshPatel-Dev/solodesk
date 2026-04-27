@@ -1,6 +1,4 @@
 import mongoose from "mongoose";
-import Payment from "../models/payment.model.js";
-import PaymentTransaction from "../models/paymentTransaction.model.js";
 import Project from "../models/project.model.js";
 import {
   sendBadRequestError,
@@ -15,7 +13,6 @@ import {
 } from "../validators/objectIdValidator.js";
 
 const toPositiveNumberOrNull = (value) => {
-  // Centralize numeric coercion so validation rules stay consistent across endpoints.
   if (value === undefined || value === null || value === "") return null;
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) return null;
@@ -27,6 +24,44 @@ const toIsoDateOrNull = (value) => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed;
+};
+
+const toProjectWithLegacyStatus = (projectDoc) => {
+  const project = projectDoc?.toObject ? projectDoc.toObject() : projectDoc;
+
+  if (!project) return null;
+
+  return {
+    ...project,
+    status: project.projectStatus || project.status,
+  };
+};
+
+const toPaymentRecord = (projectDoc) => {
+  const project = toProjectWithLegacyStatus(projectDoc);
+  if (!project) return null;
+
+  return {
+    _id: project._id,
+    projectId: project,
+    totalAmount: project.budget || 0,
+    paidAmount: project.paidAmount || 0,
+    dueAmount: project.dueAmount || 0,
+    status: project.paymentStatus || "Unpaid",
+    userId: project.userId,
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+  };
+};
+
+const allowedSortFields = {
+  createdAt: "createdAt",
+  updatedAt: "updatedAt",
+  date: "updatedAt",
+  totalAmount: "budget",
+  paidAmount: "paidAmount",
+  dueAmount: "dueAmount",
+  status: "paymentStatus",
 };
 
 // @desc    Create a new payment record
@@ -56,37 +91,36 @@ export const createPayment = async (req, res) => {
     const project = await Project.findOne({
       _id: projectId,
       userId: req.user.id,
-    });
+    }).populate("clientId", "name email phone");
 
     if (!project) {
       return sendNotFoundError(res, "Project not found or you don't have permission");
     }
 
-    const payment = await Payment.create({
-      projectId,
-      totalAmount: normalizedTotalAmount,
-      paidAmount: normalizedPaidAmount,
-      userId: req.user.id,
-    });
+    if ((project.payments?.length || 0) > 0 || (project.paidAmount || 0) > 0) {
+      return sendConflictError(
+        res,
+        "Payment record already exists for this project. Use update or add-payment endpoints instead."
+      );
+    }
 
-    const populatedPayment = await Payment.findById(payment._id)
-      .populate({
-        path: "projectId",
-        select: "name status budget clientId startDate deadline",
-        populate: { path: "clientId", select: "name email phone" },
-      })
-      .populate("userId", "name email");
+    project.budget = normalizedTotalAmount;
+
+    if (normalizedPaidAmount > 0) {
+      project.payments.push({
+        amount: normalizedPaidAmount,
+        date: new Date(),
+        note: "Initial payment",
+      });
+    }
+
+    await project.save();
 
     return res.status(201).json({
       success: true,
-      data: populatedPayment,
+      data: toPaymentRecord(project),
     });
   } catch (error) {
-    // Unique index conflicts are expected business errors, not server faults.
-    if (error?.code === 11000) {
-      return sendConflictError(res, "Payment record already exists for this project. Use update endpoint instead.");
-    }
-
     return sendServerError(res, "Create payment error", error, "Server error while creating payment record");
   }
 };
@@ -114,12 +148,17 @@ export const getPayments = async (req, res) => {
     const query = { userId: req.user.id };
 
     if (status && status !== "all") {
-      query.status = status;
+      query.paymentStatus = status;
     }
 
     if (projectId) {
       if (!validateObjectIdOrRespond(res, projectId, "project ID")) return;
-      query.projectId = projectId;
+      query._id = projectId;
+    }
+
+    if (clientId) {
+      if (!validateObjectIdOrRespond(res, clientId, "client ID")) return;
+      query.clientId = clientId;
     }
 
     if (fromDate || toDate) {
@@ -151,41 +190,14 @@ export const getPayments = async (req, res) => {
     }
 
     if (normalizedMinAmount !== null || normalizedMaxAmount !== null) {
-      query.totalAmount = {};
-      if (normalizedMinAmount !== null) query.totalAmount.$gte = normalizedMinAmount;
-      if (normalizedMaxAmount !== null) query.totalAmount.$lte = normalizedMaxAmount;
-    }
-
-    // Build project-scoped filters first so the payment query stays index-friendly.
-    let filteredProjectIds = null;
-
-    if (clientId) {
-      if (!validateObjectIdOrRespond(res, clientId, "client ID")) return;
-
-      const clientProjectIds = await Project.find({
-        userId: req.user.id,
-        clientId,
-      }).distinct("_id");
-
-      filteredProjectIds = clientProjectIds;
+      query.budget = {};
+      if (normalizedMinAmount !== null) query.budget.$gte = normalizedMinAmount;
+      if (normalizedMaxAmount !== null) query.budget.$lte = normalizedMaxAmount;
     }
 
     if (search && search.trim()) {
       const searchRegex = new RegExp(escapeRegex(search.trim()), "i");
-
-      const searchProjectIds = await Project.find({
-        userId: req.user.id,
-        $or: [{ name: searchRegex }, { type: searchRegex }, { description: searchRegex }],
-      }).distinct("_id");
-
-      filteredProjectIds = filteredProjectIds
-        // When both client and text search are present, apply intersection semantics.
-        ? filteredProjectIds.filter((id) => searchProjectIds.some((searchId) => String(searchId) === String(id)))
-        : searchProjectIds;
-    }
-
-    if (filteredProjectIds) {
-      query.projectId = { $in: filteredProjectIds };
+      query.$or = [{ name: searchRegex }, { type: searchRegex }, { description: searchRegex }];
     }
 
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
@@ -193,25 +205,21 @@ export const getPayments = async (req, res) => {
     const skip = (pageNum - 1) * limitNum;
 
     const sort = {};
-    sort[sortBy] = sortOrder === "desc" ? -1 : 1;
+    const mappedSortField = allowedSortFields[sortBy] || "createdAt";
+    sort[mappedSortField] = sortOrder === "desc" ? -1 : 1;
 
-    const [payments, total] = await Promise.all([
-      Payment.find(query)
+    const [projects, total] = await Promise.all([
+      Project.find(query)
         .sort(sort)
         .skip(skip)
         .limit(limitNum)
-        .populate({
-          path: "projectId",
-          select: "name status budget clientId startDate deadline",
-          populate: { path: "clientId", select: "name email phone" },
-        })
-        .populate("userId", "name email"),
-      Payment.countDocuments(query),
+        .populate("clientId", "name email phone"),
+      Project.countDocuments(query),
     ]);
 
     return res.status(200).json({
       success: true,
-      data: payments,
+      data: projects.map(toPaymentRecord),
       pagination: {
         page: pageNum,
         limit: limitNum,
@@ -233,24 +241,18 @@ export const getPaymentById = async (req, res) => {
 
     if (!validateObjectIdOrRespond(res, id, "payment ID")) return;
 
-    const payment = await Payment.findOne({
+    const project = await Project.findOne({
       _id: id,
       userId: req.user.id,
-    })
-      .populate({
-        path: "projectId",
-        select: "name status budget description clientId startDate deadline",
-        populate: { path: "clientId", select: "name email phone address" },
-      })
-      .populate("userId", "name email");
+    }).populate("clientId", "name email phone address");
 
-    if (!payment) {
+    if (!project) {
       return sendNotFoundError(res, "Payment record not found");
     }
 
     return res.status(200).json({
       success: true,
-      data: payment,
+      data: toPaymentRecord(project),
     });
   } catch (error) {
     return sendServerError(res, "Get payment by ID error", error, "Server error while fetching payment");
@@ -267,23 +269,26 @@ export const updatePayment = async (req, res) => {
 
     if (!validateObjectIdOrRespond(res, id, "payment ID")) return;
 
-    const payment = await Payment.findOne({
+    const project = await Project.findOne({
       _id: id,
       userId: req.user.id,
-    });
+    }).populate("clientId", "name email phone");
 
-    if (!payment) {
+    if (!project) {
       return sendNotFoundError(res, "Payment record not found");
     }
-
-    const updateData = {};
 
     if (totalAmount !== undefined) {
       const normalizedTotalAmount = toPositiveNumberOrNull(totalAmount);
       if (normalizedTotalAmount === null) {
         return sendBadRequestError(res, "Total amount must be a non-negative number");
       }
-      updateData.totalAmount = normalizedTotalAmount;
+
+      if ((project.paidAmount || 0) > normalizedTotalAmount) {
+        return sendBadRequestError(res, "Total amount cannot be less than already paid amount");
+      }
+
+      project.budget = normalizedTotalAmount;
     }
 
     if (paidAmount !== undefined) {
@@ -292,29 +297,30 @@ export const updatePayment = async (req, res) => {
         return sendBadRequestError(res, "Paid amount must be a non-negative number");
       }
 
-      const targetTotalAmount = updateData.totalAmount ?? payment.totalAmount;
-      if (normalizedPaidAmount > targetTotalAmount) {
+      const targetBudget = project.budget || 0;
+      if (normalizedPaidAmount > targetBudget) {
         return sendBadRequestError(res, "Paid amount cannot exceed total amount");
       }
 
-      updateData.paidAmount = normalizedPaidAmount;
+      if (normalizedPaidAmount < (project.paidAmount || 0)) {
+        return sendBadRequestError(res, "Paid amount cannot be reduced through this endpoint");
+      }
+
+      const adjustment = normalizedPaidAmount - (project.paidAmount || 0);
+      if (adjustment > 0) {
+        project.payments.push({
+          amount: adjustment,
+          date: new Date(),
+          note: "Adjustment from payment update",
+        });
+      }
     }
 
-    // Save document instance to preserve pre-save status/due recalculation hooks.
-    payment.set(updateData);
-    await payment.save();
-
-    const updatedPayment = await Payment.findById(payment._id)
-      .populate({
-        path: "projectId",
-        select: "name status budget clientId startDate deadline",
-        populate: { path: "clientId", select: "name email phone" },
-      })
-      .populate("userId", "name email");
+    await project.save();
 
     return res.status(200).json({
       success: true,
-      data: updatedPayment,
+      data: toPaymentRecord(project),
     });
   } catch (error) {
     return sendServerError(res, "Update payment error", error, "Server error while updating payment");
@@ -330,19 +336,22 @@ export const deletePayment = async (req, res) => {
 
     if (!validateObjectIdOrRespond(res, id, "payment ID")) return;
 
-    const payment = await Payment.findOneAndDelete({
+    const project = await Project.findOne({
       _id: id,
       userId: req.user.id,
     });
 
-    if (!payment) {
+    if (!project) {
       return sendNotFoundError(res, "Payment record not found");
     }
+
+    project.payments = [];
+    await project.save();
 
     return res.status(200).json({
       success: true,
       message: "Payment record deleted successfully",
-      data: { id: payment._id },
+      data: { id: project._id },
     });
   } catch (error) {
     return sendServerError(res, "Delete payment error", error, "Server error while deleting payment");
@@ -354,7 +363,6 @@ export const deletePayment = async (req, res) => {
 // @access  Private
 export const getPaymentStats = async (req, res) => {
   try {
-    // Aggregation compares BSON values, so convert auth user id to ObjectId explicitly.
     const userObjectId = new mongoose.Types.ObjectId(req.user.id);
 
     const [
@@ -364,40 +372,37 @@ export const getPaymentStats = async (req, res) => {
       unpaidPayments,
       totalRevenueAgg,
       totalDueAgg,
-      recentPayments,
+      recentProjects,
       monthlyStats,
     ] = await Promise.all([
-      Payment.countDocuments({ userId: req.user.id }),
-      Payment.countDocuments({ userId: req.user.id, status: "Paid" }),
-      Payment.countDocuments({ userId: req.user.id, status: "Partial" }),
-      Payment.countDocuments({ userId: req.user.id, status: "Unpaid" }),
-      Payment.aggregate([
-        { $match: { userId: userObjectId, status: "Paid" } },
-        { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+      Project.countDocuments({ userId: req.user.id }),
+      Project.countDocuments({ userId: req.user.id, paymentStatus: "Paid" }),
+      Project.countDocuments({ userId: req.user.id, paymentStatus: "Partial" }),
+      Project.countDocuments({ userId: req.user.id, paymentStatus: "Unpaid" }),
+      Project.aggregate([
+        { $match: { userId: userObjectId } },
+        { $group: { _id: null, total: { $sum: "$paidAmount" } } },
       ]),
-      Payment.aggregate([
+      Project.aggregate([
         { $match: { userId: userObjectId } },
         { $group: { _id: null, total: { $sum: "$dueAmount" } } },
       ]),
-      Payment.find({ userId: req.user.id })
+      Project.find({ userId: req.user.id })
         .sort({ updatedAt: -1 })
         .limit(5)
-        .populate({
-          path: "projectId",
-          select: "name clientId",
-          populate: { path: "clientId", select: "name" },
-        })
-        .select("totalAmount paidAmount dueAmount status projectId updatedAt"),
-      Payment.aggregate([
+        .populate("clientId", "name")
+        .select("name clientId budget paidAmount dueAmount paymentStatus updatedAt projectStatus"),
+      Project.aggregate([
         { $match: { userId: userObjectId } },
+        { $unwind: "$payments" },
         {
           $group: {
             _id: {
-              year: { $year: "$createdAt" },
-              month: { $month: "$createdAt" },
+              year: { $year: "$payments.date" },
+              month: { $month: "$payments.date" },
             },
-            totalAmount: { $sum: "$totalAmount" },
-            paidAmount: { $sum: "$paidAmount" },
+            totalAmount: { $sum: "$payments.amount" },
+            paidAmount: { $sum: "$payments.amount" },
             count: { $sum: 1 },
           },
         },
@@ -413,7 +418,7 @@ export const getPaymentStats = async (req, res) => {
       month: `${stat._id.year}-${String(stat._id.month).padStart(2, "0")}`,
       totalAmount: stat.totalAmount,
       paidAmount: stat.paidAmount,
-      dueAmount: stat.totalAmount - stat.paidAmount,
+      dueAmount: 0,
       count: stat.count,
     }));
 
@@ -434,7 +439,7 @@ export const getPaymentStats = async (req, res) => {
           totalDue,
           collectionRate,
         },
-        recentPayments,
+        recentPayments: recentProjects.map(toPaymentRecord),
         monthlyStats: formattedMonthlyStats,
       },
     });
@@ -461,28 +466,11 @@ export const getPaymentByProject = async (req, res) => {
       return sendNotFoundError(res, "Project not found or you don't have permission");
     }
 
-    const payment = await Payment.findOne({
-      projectId,
-      userId: req.user.id,
-    })
-      .populate({
-        path: "projectId",
-        select: "name status budget description startDate deadline clientId",
-        populate: { path: "clientId", select: "name email phone" },
-      })
-      .populate("userId", "name email");
-
-    if (!payment) {
-      return sendNotFoundError(res, "No payment record found for this project", {
-        data: { project, payment: null },
-      });
-    }
-
     return res.status(200).json({
       success: true,
       data: {
-        project,
-        payment,
+        project: toProjectWithLegacyStatus(project),
+        payment: toPaymentRecord(project),
       },
     });
   } catch (error) {
@@ -505,69 +493,31 @@ export const addPayment = async (req, res) => {
       return sendBadRequestError(res, "Please provide a valid positive amount");
     }
 
-    const existingPayment = await Payment.findOne({
+    const project = await Project.findOne({
       _id: id,
       userId: req.user.id,
-    }).select("_id");
+    }).populate("clientId", "name email phone");
 
-    if (!existingPayment) {
+    if (!project) {
       return sendNotFoundError(res, "Payment record not found or you don't have permission");
     }
 
-    // Atomic increment prevents overpayment races under concurrent requests.
-    const updatedPayment = await Payment.findOneAndUpdate(
-      {
-        _id: id,
-        userId: req.user.id,
-        $expr: {
-          $lte: [{ $add: ["$paidAmount", normalizedAmount] }, "$totalAmount"],
-        },
-      },
-      [
-        // Pipeline update keeps derived fields (dueAmount/status) in sync in the same write.
-        {
-          $set: {
-            paidAmount: { $add: ["$paidAmount", normalizedAmount] },
-          },
-        },
-        {
-          $set: {
-            dueAmount: { $subtract: ["$totalAmount", "$paidAmount"] },
-            status: {
-              $switch: {
-                branches: [
-                  { case: { $eq: ["$paidAmount", 0] }, then: "Unpaid" },
-                  { case: { $lt: ["$paidAmount", "$totalAmount"] }, then: "Partial" },
-                ],
-                default: "Paid",
-              },
-            },
-          },
-        },
-      ],
-      { new: true }
-    )
-      .populate({
-        path: "projectId",
-        select: "name status budget clientId",
-        populate: { path: "clientId", select: "name email phone" },
-      })
-      .populate("userId", "name email");
-
-    if (!updatedPayment) {
-      // If the document vanished between checks, surface not-found instead of balance error.
-      const paymentStillExists = await Payment.exists({ _id: id, userId: req.user.id });
-      if (!paymentStillExists) {
-        return sendNotFoundError(res, "Payment record not found or you don't have permission");
-      }
-
+    if (normalizedAmount > (project.dueAmount || 0)) {
       return sendBadRequestError(res, "Payment amount exceeds remaining balance");
     }
+
+    project.payments.push({
+      amount: normalizedAmount,
+      date: new Date(),
+      note: "Payment added from add-payment endpoint",
+    });
+
+    await project.save();
 
     return res.status(200).json({
       success: true,
       message: "Payment added successfully",
-      data: updatedPayment,
+      data: toPaymentRecord(project),
     });
   } catch (error) {
     return sendServerError(res, "Add payment error", error, "Server error while adding payment");
@@ -583,16 +533,23 @@ export const bulkDeletePayments = async (req, res) => {
 
     if (!validateObjectIdArrayOrRespond(res, paymentIds, "payment IDs")) return;
 
-    const result = await Payment.deleteMany({
+    const projects = await Project.find({
       _id: { $in: paymentIds },
       userId: req.user.id,
     });
 
+    await Promise.all(
+      projects.map(async (project) => {
+        project.payments = [];
+        await project.save();
+      })
+    );
+
     return res.status(200).json({
       success: true,
-      message: `${result.deletedCount} payment record(s) deleted successfully`,
+      message: `${projects.length} payment record(s) deleted successfully`,
       data: {
-        deletedCount: result.deletedCount,
+        deletedCount: projects.length,
       },
     });
   } catch (error) {
@@ -607,26 +564,18 @@ export const getOverduePayments = async (req, res) => {
   try {
     const today = new Date();
 
-    const overduePayments = await Payment.find({
+    const projects = await Project.find({
       userId: req.user.id,
-      status: { $in: ["Unpaid", "Partial"] },
+      paymentStatus: { $in: ["Unpaid", "Partial"] },
+      deadline: { $lt: today },
     })
-      .populate({
-        path: "projectId",
-        select: "name deadline status clientId",
-        populate: { path: "clientId", select: "name email phone" },
-      })
-      .sort({ updatedAt: -1 });
-
-    const filtered = overduePayments.filter((payment) => {
-      const deadline = payment.projectId?.deadline;
-      return deadline && new Date(deadline) < today;
-    });
+      .populate("clientId", "name email phone")
+      .sort({ deadline: 1 });
 
     return res.status(200).json({
       success: true,
-      data: filtered,
-      count: filtered.length,
+      data: projects.map(toPaymentRecord),
+      count: projects.length,
     });
   } catch (error) {
     return sendServerError(res, "Get overdue payments error", error, "Server error while fetching overdue payments");
@@ -642,31 +591,28 @@ export const getPaymentTransactionsByProject = async (req, res) => {
 
     if (!validateObjectIdOrRespond(res, projectId, "project ID")) return;
 
-    const projectExists = await Project.exists({
+    const project = await Project.findOne({
       _id: projectId,
       userId: req.user.id,
-    });
+    }).select("payments");
 
-    if (!projectExists) {
+    if (!project) {
       return sendNotFoundError(res, "Project not found or you don't have permission");
     }
 
-    const transactions = await PaymentTransaction.find({
-      projectId,
-      userId: req.user.id,
-    })
-      .sort({ paidOn: -1, createdAt: -1 })
-      .select("amount paidOn note createdAt");
+    const transactions = [...(project.payments || [])]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .map((item, index) => ({
+        _id: `${projectId}-${index}-${new Date(item.date).getTime()}`,
+        amount: item.amount,
+        date: item.date,
+        note: item.note || "",
+        createdAt: item.date,
+      }));
 
     return res.status(200).json({
       success: true,
-      data: transactions.map((item) => ({
-        _id: item._id,
-        amount: item.amount,
-        date: item.paidOn,
-        note: item.note,
-        createdAt: item.createdAt,
-      })),
+      data: transactions,
     });
   } catch (error) {
     return sendServerError(
@@ -682,8 +628,6 @@ export const getPaymentTransactionsByProject = async (req, res) => {
 // @route   POST /api/payments/project/:projectId/transactions
 // @access  Private
 export const addPaymentTransaction = async (req, res) => {
-  const session = await mongoose.startSession();
-
   try {
     const { projectId } = req.params;
     const { amount, date, note = "" } = req.body;
@@ -700,91 +644,48 @@ export const addPaymentTransaction = async (req, res) => {
       return sendBadRequestError(res, "Date must be valid");
     }
 
-    session.startTransaction();
-
     const project = await Project.findOne({
       _id: projectId,
       userId: req.user.id,
-    }).session(session);
+    });
 
     if (!project) {
-      await session.abortTransaction();
       return sendNotFoundError(res, "Project not found or you don't have permission");
     }
 
-    const transaction = await PaymentTransaction.create(
-      [
-        {
-          projectId,
-          userId: req.user.id,
-          amount: normalizedAmount,
-          paidOn: normalizedDate || new Date(),
-          note,
-        },
-      ],
-      { session }
-    );
-
-    let paymentRecord = await Payment.findOne({
-      projectId,
-      userId: req.user.id,
-    }).session(session);
-
-    if (!paymentRecord) {
-      const baseTotal = Math.max(project.budget || 0, normalizedAmount);
-      paymentRecord = await Payment.create(
-        [
-          {
-            projectId,
-            userId: req.user.id,
-            totalAmount: baseTotal,
-            paidAmount: normalizedAmount,
-          },
-        ],
-        { session }
-      );
-      paymentRecord = paymentRecord[0];
-    } else {
-      const nextPaidAmount = paymentRecord.paidAmount + normalizedAmount;
-      if (nextPaidAmount > paymentRecord.totalAmount) {
-        await session.abortTransaction();
-        return sendBadRequestError(
-          res,
-          "Payment amount exceeds remaining balance for this project"
-        );
-      }
-
-      paymentRecord.paidAmount = nextPaidAmount;
-      await paymentRecord.save({ session });
+    if (normalizedAmount > (project.dueAmount || 0)) {
+      return sendBadRequestError(res, "Payment amount exceeds remaining balance for this project");
     }
 
-    await session.commitTransaction();
+    const paymentDate = normalizedDate || new Date();
 
-    const createdTx = transaction[0];
+    project.payments.push({
+      amount: normalizedAmount,
+      date: paymentDate,
+      note,
+    });
+
+    await project.save();
+
+    const transactionIndex = project.payments.length - 1;
 
     return res.status(201).json({
       success: true,
       message: "Payment transaction recorded successfully",
       data: {
-        _id: createdTx._id,
-        amount: createdTx.amount,
-        date: createdTx.paidOn,
-        note: createdTx.note,
-        createdAt: createdTx.createdAt,
+        _id: `${projectId}-${transactionIndex}-${paymentDate.getTime()}`,
+        amount: normalizedAmount,
+        date: paymentDate,
+        note,
+        createdAt: paymentDate,
       },
     });
   } catch (error) {
-    if (session.inTransaction()) {
-      await session.abortTransaction();
-    }
-
     return sendServerError(
       res,
       "Add payment transaction error",
       error,
       "Server error while recording payment transaction"
     );
-  } finally {
-    await session.endSession();
   }
 };

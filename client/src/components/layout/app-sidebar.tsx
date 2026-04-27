@@ -20,7 +20,6 @@ import {
   HouseIcon,
   UsersIcon,
   FolderKanbanIcon,
-  BarChart3Icon,
   SettingsIcon,
 } from "lucide-react"
 import { Separator } from "../ui/separator"
@@ -51,13 +50,6 @@ const data = {
       url: "/projects",
       icon: (
         <FolderKanbanIcon />
-      ),
-    },
-    {
-      title: "Reports",
-      url: "/reports",
-      icon: (
-        <BarChart3Icon />
       ),
     },
   ],

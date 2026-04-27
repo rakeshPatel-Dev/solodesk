@@ -13,6 +13,16 @@ import {
   validateObjectIdArrayOrRespond,
 } from "../validators/objectIdValidator.js";
 
+const withLegacyStatus = (projectDoc) => {
+  const project = projectDoc?.toObject ? projectDoc.toObject() : projectDoc;
+  if (!project) return null;
+
+  return {
+    ...project,
+    status: project.projectStatus || project.status,
+  };
+};
+
 // @desc    Create a new project
 // @route   POST /api/projects
 // @access  Private
@@ -25,9 +35,12 @@ export const createProject = async (req, res) => {
       type,
       budget,
       status,
+      projectStatus,
       startDate,
       deadline,
     } = req.body;
+
+    const normalizedProjectStatus = projectStatus || status;
 
     // Validate ObjectId for clientId
     if (!validateObjectIdOrRespond(res, clientId, "client ID")) return;
@@ -66,7 +79,7 @@ export const createProject = async (req, res) => {
       userId: req.user.id,
       type,
       budget: budget || 0,
-      status: status || "Lead",
+      projectStatus: normalizedProjectStatus || "Lead",
       startDate,
       deadline,
     });
@@ -79,7 +92,7 @@ export const createProject = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      data: populatedProject,
+      data: withLegacyStatus(populatedProject),
     });
   } catch (error) {
     return sendServerError(res, "Create project error", error, "Server error while creating project");
@@ -113,7 +126,7 @@ export const getProjects = async (req, res) => {
 
     // Filter by status
     if (status && status !== "all") {
-      query.status = status;
+      query.projectStatus = status;
     }
 
     // Filter by client
@@ -167,7 +180,8 @@ export const getProjects = async (req, res) => {
 
     // Sorting
     const sort = {};
-    sort[sortBy] = sortOrder === "desc" ? -1 : 1;
+    const normalizedSortBy = sortBy === "status" ? "projectStatus" : sortBy;
+    sort[normalizedSortBy] = sortOrder === "desc" ? -1 : 1;
 
     // Execute queries
     const [projects, total] = await Promise.all([
@@ -182,7 +196,7 @@ export const getProjects = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: projects,
+      data: projects.map(withLegacyStatus),
       pagination: {
         page: pageNum,
         limit: limitNum,
@@ -218,7 +232,7 @@ export const getProjectById = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: project,
+      data: withLegacyStatus(project),
     });
   } catch (error) {
     return sendServerError(res, "Get project by ID error", error, "Server error while fetching project");
@@ -238,9 +252,12 @@ export const updateProject = async (req, res) => {
       type,
       budget,
       status,
+      projectStatus,
       startDate,
       deadline,
     } = req.body;
+
+    const normalizedProjectStatus = projectStatus || status;
 
     // Validate ObjectId
     if (!validateObjectIdOrRespond(res, id, "project ID")) return;
@@ -299,7 +316,7 @@ export const updateProject = async (req, res) => {
         clientId: clientId || project.clientId,
         type: type !== undefined ? type : project.type,
         budget: budget !== undefined ? budget : project.budget,
-        status: status || project.status,
+        projectStatus: normalizedProjectStatus || project.projectStatus,
         startDate: newStartDate,
         deadline: newDeadline,
       },
@@ -308,7 +325,7 @@ export const updateProject = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: updatedProject,
+      data: withLegacyStatus(updatedProject),
     });
   } catch (error) {
     return sendServerError(res, "Update project error", error, "Server error while updating project");
@@ -360,9 +377,9 @@ export const getProjectStats = async (req, res) => {
       projectsByClient,
     ] = await Promise.all([
       Project.countDocuments({ userId: req.user.id }),
-      Project.countDocuments({ userId: req.user.id, status: "Lead" }),
-      Project.countDocuments({ userId: req.user.id, status: "In Progress" }),
-      Project.countDocuments({ userId: req.user.id, status: "Completed" }),
+      Project.countDocuments({ userId: req.user.id, projectStatus: "Lead" }),
+      Project.countDocuments({ userId: req.user.id, projectStatus: "In Progress" }),
+      Project.countDocuments({ userId: req.user.id, projectStatus: "Completed" }),
       Project.aggregate([
         { $match: { userId: new mongoose.Types.ObjectId(req.user.id) } },
         { $group: { _id: null, total: { $sum: "$budget" } } },
@@ -371,7 +388,7 @@ export const getProjectStats = async (req, res) => {
         .sort({ createdAt: -1 })
         .limit(5)
         .populate("clientId", "name")
-        .select("name status budget clientId createdAt"),
+        .select("name projectStatus budget clientId createdAt"),
       Project.aggregate([
         { $match: { userId: new mongoose.Types.ObjectId(req.user.id) } },
         {
@@ -412,7 +429,7 @@ export const getProjectStats = async (req, res) => {
           completed: completedProjects,
         },
         totalBudget: totalBudget[0]?.total || 0,
-        recentProjects,
+        recentProjects: recentProjects.map(withLegacyStatus),
         topClients: projectsByClient,
       },
     });
@@ -468,7 +485,7 @@ export const updateProjectStatus = async (req, res) => {
 
     const project = await Project.findOneAndUpdate(
       { _id: id, userId: req.user.id },
-      { status },
+      { projectStatus: status },
       { new: true, runValidators: true }
     ).populate("clientId", "name");
 
@@ -478,7 +495,7 @@ export const updateProjectStatus = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: project,
+      data: withLegacyStatus(project),
     });
   } catch (error) {
     return sendServerError(res, "Update project status error", error, "Server error while updating project status");
@@ -510,11 +527,11 @@ export const getProjectsByClient = async (req, res) => {
       userId: req.user.id,
     })
       .sort({ createdAt: -1 })
-      .select("name status budget startDate deadline type");
+      .select("name projectStatus budget startDate deadline type");
 
     res.status(200).json({
       success: true,
-      data: projects,
+      data: projects.map(withLegacyStatus),
       count: projects.length,
     });
   } catch (error) {
@@ -546,12 +563,12 @@ export const searchProjects = async (req, res) => {
     })
       .limit(limitNum)
       .populate("clientId", "name email")
-      .select("name status budget clientId type")
+      .select("name projectStatus budget clientId type")
       .sort({ name: 1 });
 
     res.status(200).json({
       success: true,
-      data: projects,
+      data: projects.map(withLegacyStatus),
       count: projects.length,
     });
   } catch (error) {
@@ -578,15 +595,15 @@ export const getUpcomingDeadlines = async (req, res) => {
     const projects = await Project.find({
       userId: req.user.id,
       deadline: { $gte: today, $lte: futureDate },
-      status: { $ne: "Completed" },
+      projectStatus: { $ne: "Completed" },
     })
       .sort({ deadline: 1 })
       .populate("clientId", "name email")
-      .select("name deadline status budget clientId");
+      .select("name deadline projectStatus budget clientId");
 
     res.status(200).json({
       success: true,
-      data: projects,
+      data: projects.map(withLegacyStatus),
       count: projects.length,
     });
   } catch (error) {
