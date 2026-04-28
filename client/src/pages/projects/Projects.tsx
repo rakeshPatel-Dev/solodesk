@@ -4,12 +4,11 @@ import { useNavigate } from 'react-router-dom'
 import axiosInstance from '@/lib/axios'
 import { toast } from 'sonner'
 import ProjectsFilters from './components/ProjectsFilters'
-import ProjectsHeader from './components/ProjectsHeader'
+import ProjectsToolbar from './components/ProjectsToolbar'
 import ProjectsStats from './components/ProjectsStats'
 import ProjectsTable from './components/ProjectsTable'
 import { getClientName } from './components/project-page-utils'
 import {
-  type MoneyStatus,
   type Project,
   type ProjectSortBy,
   type ProjectStatusFilter,
@@ -49,30 +48,6 @@ const Projects = () => {
     fetchProjects()
   }, [])
 
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const getPaidAmount = (_projectId: string) => {
-    // Payment tracking is now handled by the API
-    // This can be updated if the Project object includes payment data
-    return 0
-  }
-
-  const getDueAmount = (project: Project) => {
-    // Due amount is calculated from budget (payments tracked by API)
-    return project.budget ?? 0
-  }
-
-  const getMoneyStatus = (project: Project): MoneyStatus => {
-    const paid = getPaidAmount(project._id)
-    const budget = project.budget ?? 0
-    const due = getDueAmount(project)
-
-    if (budget > 0 && due === 0 && paid >= budget) return 'Paid'
-    if (paid > 0) return 'Partial'
-    return 'Unpaid'
-  }
-
-
   const normalizedSearch = searchTerm.trim().toLowerCase()
   const filteredProjects = projects
     .filter((project) => {
@@ -94,7 +69,7 @@ const Projects = () => {
     })
     .sort((a, b) => {
       if (sortBy === 'highestDue') {
-        return getDueAmount(b) - getDueAmount(a)
+        return (b.dueAmount ?? 0) - (a.dueAmount ?? 0)
       }
 
       const aDate = a.deadline ? new Date(a.deadline).getTime() : 0
@@ -113,7 +88,8 @@ const Projects = () => {
 
   const handleMarkCompleted = async (projectId: string) => {
     try {
-      await axiosInstance.patch(`/projects/${projectId}`, { status: 'Completed' })
+      // Use the status-specific endpoint
+      await axiosInstance.patch(`/projects/${projectId}/status`, { status: 'Completed' })
       setProjects((prev) =>
         prev.map((project) =>
           project._id === projectId
@@ -167,7 +143,7 @@ const Projects = () => {
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-8 px-4 py-6 lg:px-8 lg:py-8">
-      <ProjectsHeader onAddProject={() => setIsAddProjectOpen(true)} />
+      <ProjectsToolbar onAddProject={() => setIsAddProjectOpen(true)} />
 
       <ProjectsFilters
         searchTerm={searchTerm}
@@ -178,20 +154,13 @@ const Projects = () => {
         onSortByChange={setSortBy}
       />
 
-      <ProjectsStats
-        projects={projects}
-        getPaidAmount={getPaidAmount}
-        getDueAmount={getDueAmount}
-      />
+      <ProjectsStats projects={projects} />
 
       <ProjectsTable
         isLoading={isLoading}
         projects={filteredProjects}
         searchTerm={searchTerm}
         statusFilter={statusFilter}
-        getPaidAmount={getPaidAmount}
-        getDueAmount={getDueAmount}
-        getMoneyStatus={getMoneyStatus}
         onClearFilters={handleClearFilters}
         onCreateFirstProject={() => setIsAddProjectOpen(true)}
         onOpenProjectDetail={openProjectDetail}

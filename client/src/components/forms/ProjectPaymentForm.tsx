@@ -133,7 +133,8 @@ function ProjectPaymentForm({
     const loadingToast = toast.loading("Recording payment...")
 
     try {
-      await axiosInstance.post(`/projects/${projectId}/payments`, payload)
+      // Use payments controller endpoint (server expects /api/payments/project/:projectId/transactions)
+      await axiosInstance.post(`/payments/project/${projectId}/transactions`, payload)
 
       toast.dismiss(loadingToast)
       toast.success("Payment recorded successfully", {

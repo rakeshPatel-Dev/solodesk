@@ -24,6 +24,7 @@ import { login as setAuth, logout as clearAuth } from './store/features/authSlic
 import { clearAuthStorage, writeAuthStorage } from './store/authStorage'
 import type { RootState } from './store/store'
 import { Loader2Icon } from 'lucide-react'
+import HelpCenterPage from './pages/HelpCenter.tsx'
 
 const App = () => {
   const location = useLocation()
@@ -134,6 +135,7 @@ const App = () => {
               <Route path="new" element={<AddTask />} />
             </Route>
             <Route path="/settings" element={<Settings />} />
+            <Route path="/help-center" element={<HelpCenterPage />} />
             <Route path="/account" element={<Account />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/auth" element={<Navigate to="/auth/login" replace />} />

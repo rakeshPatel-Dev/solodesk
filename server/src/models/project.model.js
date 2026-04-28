@@ -18,7 +18,6 @@ const paymentSchema = new mongoose.Schema(
       maxlength: 300,
     },
   },
-  { _id: false }
 );
 
 const projectSchema = new mongoose.Schema(
@@ -120,7 +119,7 @@ projectSchema.pre("save", async function () {
       {
         $inc: { amountSpend: this.paidAmount - (this._previousPaidAmount || 0) },
       },
-      { new: true }
+      { returnDocument: "after" }
     ).exec();
     this._previousPaidAmount = this.paidAmount; // store for next change
   }

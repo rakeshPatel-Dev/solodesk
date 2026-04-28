@@ -1,4 +1,4 @@
-import { Search } from 'lucide-react'
+import { Filter, Search } from 'lucide-react'
 
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -33,11 +33,11 @@ function ProjectsFilters({
     <Card className="border border-border/70 bg-card p-4 sm:p-5">
       <div className="grid gap-3 md:grid-cols-12">
         <div className="relative md:col-span-6">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground\" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={searchTerm}
             onChange={(event) => onSearchTermChange(event.target.value)}
-            placeholder="Search by project name or client"
+            placeholder="Search projects by name or client..."
             className="pl-9"
           />
         </div>
@@ -48,6 +48,7 @@ function ProjectsFilters({
             onValueChange={(value: ProjectStatusFilter) => onStatusFilterChange(value)}
           >
             <SelectTrigger className="w-full">
+              <Filter className="mr-2 h-4 w-4 text-muted-foreground" />
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
             <SelectContent>

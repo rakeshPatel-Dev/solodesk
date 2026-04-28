@@ -7,14 +7,12 @@ import { type Project } from './project-page-types'
 
 type ProjectsStatsProps = {
   projects: Project[]
-  getPaidAmount: (projectId: string) => number
-  getDueAmount: (project: Project) => number
 }
 
-function ProjectsStats({ projects, getPaidAmount, getDueAmount }: ProjectsStatsProps) {
+function ProjectsStats({ projects }: ProjectsStatsProps) {
   const totalBudget = projects.reduce((sum, project) => sum + (project.budget ?? 0), 0)
-  const totalPaid = projects.reduce((sum, project) => sum + getPaidAmount(project._id), 0)
-  const totalDue = projects.reduce((sum, project) => sum + getDueAmount(project), 0)
+  const totalPaid = projects.reduce((sum, project) => sum + (project.paidAmount ?? 0), 0)
+  const totalDue = projects.reduce((sum, project) => sum + (project.dueAmount ?? 0), 0)
   const activeProjects = projects.filter(
     (project) => project.status === 'Lead' || project.status === 'In Progress'
   ).length

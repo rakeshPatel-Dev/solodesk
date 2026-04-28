@@ -8,6 +8,9 @@ export type Project = {
   }
   type?: string
   budget?: number
+  paidAmount?: number
+  dueAmount?: number
+  paymentStatus?: 'Paid' | 'Partial' | 'Unpaid'
   status?: 'Lead' | 'In Progress' | 'Completed'
   startDate?: string
   deadline?: string

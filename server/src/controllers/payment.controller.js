@@ -592,8 +592,6 @@ export const addPaymentTransaction = async (req, res) => {
     if (!project) {
       return sendNotFoundError(res, "Project not found or you don't have permission");
     }
-    console.log("Current due amount:", project.dueAmount);
-    console.log("Attempting to add payment amount:", normalizedAmount);
 
     if (normalizedAmount > (project.dueAmount || 0)) {
       return sendBadRequestError(res, "Payment amount exceeds remaining balance for this project");
@@ -661,7 +659,8 @@ export const updatePaymentTransaction = async (req, res) => {
       return sendNotFoundError(res, "Project not found or you don't have permission");
     }
 
-    const payment = project.payments.find((item) => item._id === transactionId);
+    // Allow transactionId values that may be synthetic IDs generated for client-side listing
+    const payment = project.payments.find((item) => String(item._id) === transactionId || `${projectId}-${project.payments.indexOf(item)}-${new Date(item.date).getTime()}` === transactionId);
     if (!payment) {
       return sendNotFoundError(res, "Payment transaction not found or you don't have permission");
     }
@@ -715,12 +714,12 @@ export const deletePaymentTransaction = async (req, res) => {
       return sendNotFoundError(res, "Project not found or you don't have permission");
     }
 
-    const payment = project.payments.find((item) => item._id === transactionId);
+    const payment = project.payments.find((item) => String(item._id) === transactionId || `${projectId}-${project.payments.indexOf(item)}-${new Date(item.date).getTime()}` === transactionId);
     if (!payment) {
       return sendNotFoundError(res, "Payment transaction not found or you don't have permission");
     }
 
-    project.payments = project.payments.filter((item) => item._id !== transactionId);
+    project.payments = project.payments.filter((item) => !(String(item._id) === transactionId || `${projectId}-${project.payments.indexOf(item)}-${new Date(item.date).getTime()}` === transactionId));
 
     await project.save();
 
