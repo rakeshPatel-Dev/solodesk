@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import Client from "./client.model.js";
 
 const paymentSchema = new mongoose.Schema(
   {
@@ -100,13 +101,29 @@ const projectSchema = new mongoose.Schema(
 
 
 // 🔥 AUTO CALCULATIONS (CORE LOGIC)
-projectSchema.pre("save", function () {
+projectSchema.pre("save", async function () {
+  // Store the previous paid amount before recalculation (handles fetched documents)
+  if (!this._previousPaidAmount) {
+    this._previousPaidAmount = this.paidAmount || 0;
+  }
+
   // calculate total paid from history
   this.paidAmount = this.payments.reduce(
     (sum, p) => sum + p.amount,
     0
   );
 
+  // update client's total spend
+  if (this.isModified("paidAmount") || this.isModified("clientId")) {
+    await Client.findByIdAndUpdate(
+      this.clientId,
+      {
+        $inc: { amountSpend: this.paidAmount - (this._previousPaidAmount || 0) },
+      },
+      { new: true }
+    ).exec();
+    this._previousPaidAmount = this.paidAmount; // store for next change
+  }
   // calculate due
   const total = this.budget || 0;
   this.dueAmount = Math.max(total - this.paidAmount, 0);

@@ -6,6 +6,7 @@ export type Client = {
   address?: string
   notes?: string
   status?: 'Active' | 'Inactive'
+  amountSpend?: number
 }
 
 export type ClientStatusFilter = 'all' | 'Active' | 'Inactive'

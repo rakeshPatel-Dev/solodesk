@@ -45,6 +45,11 @@ const clientSchema = new mongoose.Schema(
       default: "Active",
       index: true,
     },
+
+    amountSpend: {
+      type: Number,
+      default: 0,
+    },
   },
   { timestamps: true }
 );

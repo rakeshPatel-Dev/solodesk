@@ -3,7 +3,6 @@ import User from "../models/user.model.js";
 import Client from "../models/client.model.js";
 import Project from "../models/project.model.js";
 import Task from "../models/task.model.js";
-import Payment from "../models/payment.model.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { generateToken, generateResetToken } from "../utils/generateToken.js";
@@ -536,9 +535,6 @@ export const deleteAccount = async (req, res) => {
       Client.deleteMany({ userId }),
       Project.deleteMany({ userId }),
       Task.deleteMany({
-        $or: [{ userId }, { projectId: { $in: projectIds } }],
-      }),
-      Payment.deleteMany({
         $or: [{ userId }, { projectId: { $in: projectIds } }],
       }),
       User.deleteOne({ _id: userId }),

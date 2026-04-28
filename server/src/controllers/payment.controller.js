@@ -65,67 +65,6 @@ const allowedSortFields = {
   status: "paymentStatus",
 };
 
-// @desc    Create a new payment record
-// @route   POST /api/payments
-// @access  Private
-export const createPayment = async (req, res) => {
-  try {
-    const { projectId, totalAmount, paidAmount = 0 } = req.body;
-
-    if (!validateObjectIdOrRespond(res, projectId, "project ID")) return;
-
-    const normalizedTotalAmount = toPositiveNumberOrNull(totalAmount);
-    const normalizedPaidAmount = toPositiveNumberOrNull(paidAmount);
-
-    if (normalizedTotalAmount === null) {
-      return sendBadRequestError(res, "Total amount must be a non-negative number");
-    }
-
-    if (normalizedPaidAmount === null) {
-      return sendBadRequestError(res, "Paid amount must be a non-negative number");
-    }
-
-    if (normalizedPaidAmount > normalizedTotalAmount) {
-      return sendBadRequestError(res, "Paid amount cannot exceed total amount");
-    }
-
-    const project = await Project.findOne({
-      _id: projectId,
-      userId: req.user.id,
-    }).populate("clientId", "name email phone");
-
-    if (!project) {
-      return sendNotFoundError(res, "Project not found or you don't have permission");
-    }
-
-    if ((project.payments?.length || 0) > 0 || (project.paidAmount || 0) > 0) {
-      return sendConflictError(
-        res,
-        "Payment record already exists for this project. Use update or add-payment endpoints instead."
-      );
-    }
-
-    project.budget = normalizedTotalAmount;
-
-    if (normalizedPaidAmount > 0) {
-      project.payments.push({
-        amount: normalizedPaidAmount,
-        date: new Date(),
-        note: "Initial payment",
-      });
-    }
-
-    await project.save();
-
-    return res.status(201).json({
-      success: true,
-      data: toPaymentRecord(project),
-    });
-  } catch (error) {
-    return sendServerError(res, "Create payment error", error, "Server error while creating payment record");
-  }
-};
-
 // @desc    Get all payments for authenticated user
 // @route   GET /api/payments
 // @access  Private
@@ -653,6 +592,8 @@ export const addPaymentTransaction = async (req, res) => {
     if (!project) {
       return sendNotFoundError(res, "Project not found or you don't have permission");
     }
+    console.log("Current due amount:", project.dueAmount);
+    console.log("Attempting to add payment amount:", normalizedAmount);
 
     if (normalizedAmount > (project.dueAmount || 0)) {
       return sendBadRequestError(res, "Payment amount exceeds remaining balance for this project");
@@ -687,6 +628,113 @@ export const addPaymentTransaction = async (req, res) => {
       "Add payment transaction error",
       error,
       "Server error while recording payment transaction"
+    );
+  }
+};
+
+// @desc    Update payment transaction  
+// @route   PUT /api/payments/project/:projectId/transactions/:transactionId
+// @access  Private
+export const updatePaymentTransaction = async (req, res) => {
+  try {
+    const { projectId, transactionId } = req.params;
+    const { amount, date, note } = req.body;
+
+    if (!validateObjectIdOrRespond(res, projectId, "project ID")) return;
+
+    const normalizedAmount = toPositiveNumberOrNull(amount);
+    if (normalizedAmount === null || normalizedAmount <= 0) {
+      return sendBadRequestError(res, "Amount must be a valid positive number");
+    }
+
+    const normalizedDate = toIsoDateOrNull(date);
+    if (date && !normalizedDate) {
+      return sendBadRequestError(res, "Date must be valid");
+    }
+
+    const project = await Project.findOne({
+      _id: projectId,
+      userId: req.user.id,
+    });
+
+    if (!project) {
+      return sendNotFoundError(res, "Project not found or you don't have permission");
+    }
+
+    const payment = project.payments.find((item) => item._id === transactionId);
+    if (!payment) {
+      return sendNotFoundError(res, "Payment transaction not found or you don't have permission");
+    }
+
+    if (normalizedAmount > (project.dueAmount || 0)) {
+      return sendBadRequestError(res, "Payment amount exceeds remaining balance for this project");
+    }
+
+    payment.amount = normalizedAmount;
+    payment.date = normalizedDate || payment.date;
+    payment.note = note;
+
+    await project.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment transaction updated successfully",
+      data: {
+        _id: transactionId,
+        amount: normalizedAmount,
+        date: normalizedDate || payment.date,
+        note,
+        createdAt: payment.date,
+      },
+    });
+  } catch (error) {
+    return sendServerError(
+      res,
+      "Update payment transaction error",
+      error,
+      "Server error while updating payment transaction"
+    );
+  }
+};
+
+// @desc    Delete payment transaction
+// @route   DELETE /api/payments/project/:projectId/transactions/:transactionId
+// @access  Private
+export const deletePaymentTransaction = async (req, res) => {
+  try {
+    const { projectId, transactionId } = req.params;
+
+    if (!validateObjectIdOrRespond(res, projectId, "project ID")) return;
+
+    const project = await Project.findOne({
+      _id: projectId,
+      userId: req.user.id,
+    });
+
+    if (!project) {
+      return sendNotFoundError(res, "Project not found or you don't have permission");
+    }
+
+    const payment = project.payments.find((item) => item._id === transactionId);
+    if (!payment) {
+      return sendNotFoundError(res, "Payment transaction not found or you don't have permission");
+    }
+
+    project.payments = project.payments.filter((item) => item._id !== transactionId);
+
+    await project.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment transaction deleted successfully",
+      data: { id: transactionId },
+    });
+  } catch (error) {
+    return sendServerError(
+      res,
+      "Delete payment transaction error",
+      error,
+      "Server error while deleting payment transaction"
     );
   }
 };

@@ -55,6 +55,7 @@ function ClientsTable({
   statusUpdatingClientId,
   onDeleteClient,
 }: ClientsTableProps) {
+
   return (
     <section>
       <Card className="overflow-hidden border border-border/60 bg-card shadow-sm">
@@ -245,7 +246,7 @@ function ClientsTable({
                     </TableCell>
 
                     <TableCell className="py-4 text-right font-mono text-sm font-semibold text-foreground">
-                      $0
+                      {client.amountSpend?.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
                     </TableCell>
 
                     <TableCell className="py-4 pr-4 text-right">
