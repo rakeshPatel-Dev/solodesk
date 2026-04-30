@@ -14,6 +14,7 @@ import {
   type ProjectStatusFilter,
 } from './components/project-page-types'
 
+
 const AddProjectDialog = lazy(() => import('./components/AddProjectDialog'))
 const ProjectPaymentDialog = lazy(() => import('./components/ProjectPaymentDialog'))
 
@@ -107,6 +108,27 @@ const Projects = () => {
     }
   }
 
+  const handleMarkInProgress = async (projectId: string) => {
+    try {
+      await axiosInstance.patch(`/projects/${projectId}/status`, { status: 'In Progress' })
+      setProjects((prev) =>
+        prev.map((project) =>
+          project._id === projectId
+            ? {
+              ...project,
+              status: 'In Progress',
+            } : project
+        )
+      )
+      toast.success('Project marked as in progress')
+    } catch (error) {
+      toast.error('Failed to update project')
+      console.error(error)
+    }
+  }
+
+
+
   const handleDeleteProject = async (projectId: string) => {
     if (!confirm('Are you sure you want to delete this project?')) return
     try {
@@ -145,6 +167,7 @@ const Projects = () => {
     <div className="mx-auto w-full max-w-7xl space-y-8 px-4 py-6 lg:px-8 lg:py-8">
       <ProjectsToolbar onAddProject={() => setIsAddProjectOpen(true)} />
 
+      <ProjectsStats projects={projects} />
       <ProjectsFilters
         searchTerm={searchTerm}
         onSearchTermChange={setSearchTerm}
@@ -154,7 +177,6 @@ const Projects = () => {
         onSortByChange={setSortBy}
       />
 
-      <ProjectsStats projects={projects} />
 
       <ProjectsTable
         isLoading={isLoading}
@@ -167,6 +189,7 @@ const Projects = () => {
         onOpenPaymentModal={handleOpenPaymentModal}
         onEditProject={handleEditProject}
         onMarkCompleted={handleMarkCompleted}
+        onMarkInProgress={handleMarkInProgress}
         onDeleteProject={handleDeleteProject}
       />
 

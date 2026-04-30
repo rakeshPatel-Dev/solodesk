@@ -26,6 +26,7 @@ type ProjectsTableProps = {
   onOpenPaymentModal: (projectId: string) => void
   onEditProject: (projectId: string) => void
   onMarkCompleted: (projectId: string) => void
+  onMarkInProgress: (projectId: string) => void
   onDeleteProject: (projectId: string) => void
 }
 
@@ -40,6 +41,7 @@ function ProjectsTable({
   onOpenPaymentModal,
   onEditProject,
   onMarkCompleted,
+  onMarkInProgress,
   onDeleteProject,
 }: ProjectsTableProps) {
   if (isLoading) {
@@ -125,6 +127,7 @@ function ProjectsTable({
                   onOpenPaymentModal={onOpenPaymentModal}
                   onEditProject={onEditProject}
                   onMarkCompleted={onMarkCompleted}
+                  onMarkInProgress={onMarkInProgress}
                   onDeleteProject={onDeleteProject}
                 />
               ))}

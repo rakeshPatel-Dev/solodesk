@@ -1,9 +1,36 @@
 import { type MoneyStatus, type Project } from './project-page-types'
 
+const MS_PER_DAY = 1000 * 60 * 60 * 24
+
+const parseDateValue = (value?: string) => {
+  if (!value) return null
+
+  const isDateOnlyValue = /^\d{4}-\d{2}-\d{2}$/.test(value)
+  const parsedDate = isDateOnlyValue ? new Date(`${value}T00:00:00`) : new Date(value)
+
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate
+}
+
+const toLocalStartOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
+
+export const getDaysUntilDate = (value?: string) => {
+  const date = parseDateValue(value)
+  if (!date) return null
+
+  const today = toLocalStartOfDay(new Date())
+  const target = toLocalStartOfDay(date)
+
+  return Math.round((target.getTime() - today.getTime()) / MS_PER_DAY)
+}
+
 export const formatDate = (value?: string) => {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
+  const date = parseDateValue(value)
+  if (!date) return '-'
+
+  const todayOffset = getDaysUntilDate(value)
+
+  if (todayOffset === 0) return 'Today'
+  if (todayOffset === 1) return 'Tomorrow'
 
   return date.toLocaleDateString('en-US', {
     month: 'short',

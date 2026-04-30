@@ -5,6 +5,8 @@ import {
   addPaymentTransaction,
   updatePaymentTransaction,
   deletePaymentTransaction,
+  getPayments,
+  getPaymentById,
 } from "../controllers/payment.controller.js";
 
 const router = express.Router();
@@ -27,8 +29,8 @@ router.use(protect);
 
 // Standard CRUD routes
 // router.post("/", createPayment);
-// router.get("/", getPayments);
-// router.get("/:id", getPaymentById);
+router.get("/", getPayments);
+router.get("/:id", getPaymentById);
 // router.put("/:id", updatePayment);
 // router.delete("/:id", deletePayment);
 
